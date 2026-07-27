@@ -13,12 +13,13 @@ const crypto = require('crypto');
 
 // 版本号以 package.json 为准，代码里不再各写一份。
 // 升版本只改 package.json（或用 npm version）
-let VERSION = '1.0.0';
+let VERSION = '1.1.0';
 try { VERSION = require('./package.json').version || VERSION; } catch (e) {}
 
 const PORT = process.env.PORT || 8787;
 const HTML_FILE = path.join(__dirname, 'index.html');
 const DATA_FILE = path.join(__dirname, 'hearts.json');
+const HISTORY_DIR = path.join(__dirname, 'history');
 
 const ROOM_KEY = process.env.ROOM_KEY || 'change-me';
 
@@ -61,6 +62,40 @@ function today() {
 function rollDay() {
   const t = today();
   if (store.day.date !== t) store.day = { date: t, n: 0, byName: {} };
+}
+
+// ---------- 聊天记录 ----------
+// 一天一个文件：history/20260727，一行一条 JSON。
+// 追加写，不读回内存，历史多了也不占地方。
+function stamp(d) {
+  const p = n => String(n).padStart(2, '0');
+  return d.getFullYear() + p(d.getMonth() + 1) + p(d.getDate());
+}
+
+function logNote(name, text, t) {
+  const line = JSON.stringify({ t, name, text }) + '\n';
+  fs.mkdir(HISTORY_DIR, { recursive: true }, err => {
+    if (err) return;
+    fs.appendFile(path.join(HISTORY_DIR, stamp(new Date(t))), line, () => {});
+  });
+}
+
+// 有哪几天的记录，新的在前
+function historyDates() {
+  try {
+    return fs.readdirSync(HISTORY_DIR).filter(f => /^\d{8}$/.test(f)).sort().reverse();
+  } catch (e) { return []; }
+}
+
+function historyRead(date) {
+  // 只认 8 位数字，挡掉 ../ 之类的路径穿越
+  if (!/^\d{8}$/.test(date)) return null;
+  let raw;
+  try { raw = fs.readFileSync(path.join(HISTORY_DIR, date), 'utf8'); } catch (e) { return null; }
+  return raw.split('\n')
+    .filter(Boolean)
+    .map(l => { try { return JSON.parse(l); } catch (e) { return null; } })
+    .filter(Boolean);
 }
 
 // ---------- 在线连接 ----------
@@ -220,6 +255,7 @@ function onMessage(client, m) {
   if (m.t === 'note') {
     const text = String(m.text || '').trim().slice(0, MAX_NOTE);
     if (!text) return;
+    logNote(client.name, text, now);
     if (![...clients].some(c => c.name !== client.name)) {
       store.stash.notes.push({ name: client.name, text, t: now });
       if (store.stash.notes.length > MAX_STASH_NOTES) store.stash.notes.shift();
@@ -275,7 +311,27 @@ const server = http.createServer(async (req, res) => {
       })),
       攒着的心跳: store.stash.hearts,
       攒着的纸条: store.stash.notes.length,
+      聊天记录天数: historyDates().length,
     }, null, 2));
+  }
+
+  // 聊天记录。不带 date 给日期清单，带 date 给那天的全部纸条
+  //   curl "http://localhost:8787/history?key=你的口令"
+  //   curl "http://localhost:8787/history?key=你的口令&date=20260727"
+  if (url.pathname === '/history') {
+    if (!keyOk(url.searchParams.get('key'))) { res.writeHead(401); return res.end(); }
+    const dates = historyDates();
+    const date = url.searchParams.get('date');
+    let body;
+    if (!date) {
+      body = { dates };
+    } else {
+      const notes = historyRead(date);
+      if (notes === null) { res.writeHead(404, { 'Cache-Control': 'no-store' }); return res.end(); }
+      body = { date, dates, notes };
+    }
+    res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
+    return res.end(JSON.stringify(body));
   }
 
   //   curl -X POST "http://localhost:8787/reset?key=你的口令"
