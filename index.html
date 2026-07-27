@@ -588,7 +588,7 @@
 
   /* ================= 调试 ================= */
   // 网址后面加 ?debug，左下角会显示服务器推来的原始名单
-  const VERSION = '1.1.3';
+  const VERSION = '1.1.4';
   const DEBUG = new URLSearchParams(location.search).has('debug');
   const dbgEl = $('dbg');
   let lastOnline = null, lastTag = '还没收到事件';
@@ -988,6 +988,7 @@
   let roster = { people: 1, list: '你', peer: '' };
   let offline = false;
   let kicked = false;
+  let stale = false;
 
   // 服务端给的是连接列表，同一个人可能开了好几台设备，按名字合并
   function applyRoster(online) {
@@ -1009,6 +1010,11 @@
   }
 
   function renderStatus() {
+    if (stale) {
+      rosterFull.textContent = '服务端已更新到 ' + serverVersion + '，请刷新页面';
+      rosterMini.textContent = '请刷新';
+      return;
+    }
     if (kicked) {
       rosterFull.textContent = '这个连接被顶掉了，刷新页面重来';
       rosterMini.textContent = '已断开';
@@ -1094,6 +1100,17 @@
     if (ev === 'welcome') {
       if (d.name) myName = d.name;          // 服务端会把名字截到 12 字
       if (d.version) serverVersion = d.version;
+      // 登录时查过一次版本，但页面开着不动、服务端在这期间升级了的话，
+      // 这个页面跑的还是旧代码 —— 旧代码可能根本处理不了新事件，
+      // 表现成「对方明明在线、消息也发了，我这边什么都没有」。
+      // 重连会重新走一次 welcome，在这里再查一遍，把它挡在明面上。
+      if (d.version && d.version !== VERSION) {
+        stale = true;
+        running = false;
+        renderStatus();
+        dump('版本不一致，需要刷新');
+        return;
+      }
       paint(d.stats);
 
     } else if (ev === 'presence') {
