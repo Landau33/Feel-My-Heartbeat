@@ -409,7 +409,8 @@
   .compact .compose,
   .compact .tally,
   .compact .help,
-  .compact .icon.pop { display: none; }
+  .compact .icon.pop,
+  .compact .chip.extra { display: none; }   /* 悬浮窗只留前三个，多了会把窗口撑宽 */
   .compact .chip { padding: 4px 9px; font-size: 10.5px; }
   .compact .icon { padding: 3px 7px; font-size: 9.5px; }
   .compact .note { font-size: 11.5px; bottom: 30%; padding: 6px 11px; }
@@ -571,7 +572,10 @@
 
   const HEART = 'M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z';
   const C = { mine: '#ff5f8d', yours: '#5ee0d0', gold: '#ffd76e' };
+  // 前三个悬浮窗里也留着；QUICK_MORE 只在大窗口出现，
+  // 免得把只有 200px 宽的悬浮窗撑开
   const QUICK = ['想你了', '在干嘛', '抱抱'];
+  const QUICK_MORE = ['早安', '晚安', '爱你', '亲亲', '吃了吗', '我到家了', '辛苦了', '睡了吗'];
 
   let myName = '', myKey = '', myId = '';
   let remoteTimer = null, syncTimer = null;
@@ -584,7 +588,7 @@
 
   /* ================= 调试 ================= */
   // 网址后面加 ?debug，左下角会显示服务器推来的原始名单
-  const VERSION = '1.1.2';
+  const VERSION = '1.1.3';
   const DEBUG = new URLSearchParams(location.search).has('debug');
   const dbgEl = $('dbg');
   let lastOnline = null, lastTag = '还没收到事件';
@@ -932,13 +936,15 @@
     if (DEBUG) setTimeout(histDates, 300);
   }
 
-  QUICK.forEach(q => {
+  function addChip(q, extra) {
     const b = document.createElement('button');
-    b.className = 'chip';
+    b.className = extra ? 'chip extra' : 'chip';
     b.textContent = q;
     b.addEventListener('click', () => sendText(q));
     chipsEl.appendChild(b);
-  });
+  }
+  QUICK.forEach(q => addChip(q, false));
+  QUICK_MORE.forEach(q => addChip(q, true));
 
   sendNote.addEventListener('click', () => { sendText(noteIn.value); noteIn.value = ''; });
   noteIn.addEventListener('keydown', e => {
