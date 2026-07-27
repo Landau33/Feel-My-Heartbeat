@@ -1,0 +1,14 @@
+{
+  "name": "heartbeat-lighthouse",
+  "version": "1.0.0",
+  "description": "心跳灯塔 · 只有两个人的爱心同步网页，零依赖",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=16"
+  },
+  "private": true,
+  "license": "MIT"
+}

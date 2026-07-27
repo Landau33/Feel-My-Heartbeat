@@ -1,0 +1,1088 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0d0b18">
+<title>Feel My Heartbeat</title>
+<style id="app-css">
+  :root {
+    --ink:      #0d0b18;
+    --ink-soft: #171430;
+    --haze:     #2a2450;
+    --mine:     #ff5f8d;
+    --yours:    #5ee0d0;
+    --gold:     #ffd76e;
+    --text:     #e8e4ff;
+    --dim:      #7d76a8;
+    --mono: ui-monospace, "SF Mono", "Cascadia Mono", Menlo, monospace;
+    --sans: "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", system-ui, sans-serif;
+  }
+
+  * { box-sizing: border-box; }
+
+  html, body {
+    margin: 0; height: 100%;
+    background: var(--ink); color: var(--text);
+    font-family: var(--sans); overflow: hidden;
+    -webkit-tap-highlight-color: transparent;
+    -webkit-user-select: none; user-select: none;
+  }
+
+  /* ---------- 登录 ---------- */
+  .gate {
+    position: fixed; inset: 0; z-index: 90;
+    display: grid; place-content: center; gap: 16px;
+    padding: 32px; text-align: center; background: var(--ink);
+  }
+  .gate h1 {
+    margin: 0; font-size: 14px; font-weight: 500; letter-spacing: .34em;
+    color: var(--dim); font-family: var(--mono); text-transform: uppercase;
+  }
+  .gate p { margin: 0 0 6px; font-size: 13px; color: var(--dim); line-height: 1.8; }
+  .gate input {
+    width: 250px; padding: 13px 16px; background: var(--ink-soft);
+    color: var(--text); border: 1px solid var(--haze); border-radius: 12px;
+    font-size: 16px; font-family: var(--sans); text-align: center;
+  }
+  .gate input:focus { outline: 2px solid var(--mine); outline-offset: 2px; }
+  .gate button {
+    padding: 13px 28px; border: 0; border-radius: 12px;
+    background: var(--mine); color: #1a0510;
+    font-size: 15px; font-weight: 600; font-family: var(--sans); cursor: pointer;
+  }
+  .gate button:disabled { opacity: .5; cursor: default; }
+  .gate button:focus-visible { outline: 2px solid var(--text); outline-offset: 3px; }
+  .gate.hide { display: none; }
+  .err {
+    min-height: 16px; font-size: 12px; color: var(--mine);
+    font-family: var(--mono); opacity: 0; transition: opacity .2s;
+  }
+  .err.show { opacity: 1; }
+
+  /* ---------- 舞台：整块会被搬进悬浮窗 ---------- */
+  #stage {
+    position: relative; width: 100%; height: 100%;
+    display: grid; place-items: center;
+    overflow: hidden; background: var(--ink);
+  }
+  .aura {
+    position: absolute; inset: -25%; pointer-events: none;
+    background:
+      radial-gradient(38% 30% at 30% 22%, rgba(255,95,141,.17), transparent 70%),
+      radial-gradient(34% 28% at 72% 76%, rgba(94,224,208,.14), transparent 70%);
+    filter: blur(20px);
+    animation: drift 26s ease-in-out infinite alternate;
+  }
+  @keyframes drift { to { transform: translate3d(3%, -3%, 0) scale(1.08); } }
+
+  /* ---------- 大爱心 ---------- */
+  .heart-btn {
+    position: relative; z-index: 2;
+    width: min(42vmin, 175px); aspect-ratio: 1;
+    border: 0; background: none; padding: 0; cursor: pointer;
+    display: grid; place-items: center; touch-action: none;
+    animation: breathe 3.6s ease-in-out infinite;
+  }
+  @keyframes breathe { 0%,100% { transform: scale(1); } 50% { transform: scale(1.045); } }
+  .heart-btn.held { animation: pulse .38s ease-in-out infinite; }
+  @keyframes pulse { 0%,100% { transform: scale(.95); } 50% { transform: scale(1.06); } }
+  .heart-btn:focus-visible { outline: 2px dashed var(--dim); outline-offset: 12px; border-radius: 50%; }
+  .heart-btn svg { width: 100%; height: 100%; display: block; transform-origin: 50% 56%; }
+
+  /* 点一下：先被按扁，再弹过头，最后落回原位。
+     挂在 svg 上而不是按钮上，才不会跟按钮的呼吸/连发动画打架 */
+  .heart-btn.pop svg { animation: pop 440ms cubic-bezier(.28,.9,.36,1) both; }
+  @keyframes pop {
+    0%   { transform: scale(1)    translateY(0); }
+    18%  { transform: scale(.78)  translateY(2%); }
+    46%  { transform: scale(1.22) translateY(-2%); }
+    68%  { transform: scale(.94)  translateY(0); }
+    85%  { transform: scale(1.05) translateY(0); }
+    100% { transform: scale(1)    translateY(0); }
+  }
+  /* 连发时幅度收小，不然一直在跳 */
+  .heart-btn.pop.soft svg { animation: popSoft 200ms ease-out both; }
+  @keyframes popSoft {
+    0%   { transform: scale(1); }
+    35%  { transform: scale(.9); }
+    100% { transform: scale(1.03); }
+  }
+  .heart-btn .core {
+    fill: var(--mine);
+    filter: drop-shadow(0 0 22px rgba(255,95,141,.45));
+    transition: fill .45s ease, filter .45s ease;
+  }
+  #stage.remote .heart-btn .core {
+    fill: var(--yours); filter: drop-shadow(0 0 34px rgba(94,224,208,.6));
+  }
+  #stage.synced .heart-btn .core {
+    fill: var(--gold); filter: drop-shadow(0 0 46px rgba(255,215,110,.75));
+  }
+
+  /* ---------- 粒子 ---------- */
+  .ring {
+    position: absolute; left: 50%; top: 50%; z-index: 1;
+    width: 40%; aspect-ratio: 1; margin: -20% 0 0 -20%;
+    border: 1.5px solid currentColor; border-radius: 50%;
+    pointer-events: none; opacity: .8;
+    animation: ring 900ms cubic-bezier(.2,.7,.3,1) forwards;
+  }
+  @keyframes ring { to { transform: scale(3.4); opacity: 0; } }
+
+  .spark {
+    position: absolute; left: 50%; top: 50%; z-index: 3;
+    width: 22px; height: 22px; margin: -11px 0 0 -11px;
+    pointer-events: none;
+    animation: fly var(--dur) cubic-bezier(.18,.7,.32,1) forwards;
+  }
+  .spark svg { width: 100%; height: 100%; display: block; }
+  @keyframes fly {
+    0%   { transform: translate(0,0) scale(.2) rotate(0deg); opacity: 0; }
+    12%  { opacity: 1; }
+    100% { transform: translate(var(--tx), var(--ty)) scale(var(--sc)) rotate(var(--rot)); opacity: 0; }
+  }
+
+  /* 同频 */
+  .sync-label {
+    position: absolute; left: 50%; top: 50%; z-index: 6;
+    transform: translate(-50%,-50%); pointer-events: none;
+    font-family: var(--mono); font-size: 13px; letter-spacing: .5em;
+    color: var(--gold); text-indent: .5em; white-space: nowrap;
+    text-shadow: 0 0 20px rgba(255,215,110,.8);
+    animation: syncLabel 1.9s ease-out forwards;
+  }
+  @keyframes syncLabel {
+    0%   { opacity: 0; transform: translate(-50%,-50%) scale(.7); }
+    20%  { opacity: 1; transform: translate(-50%,-50%) scale(1); }
+    75%  { opacity: 1; }
+    100% { opacity: 0; transform: translate(-50%,-115%) scale(1); }
+  }
+
+  /* 纸条 */
+  .note {
+    position: absolute; left: 50%; bottom: 21%; z-index: 7;
+    max-width: 82%; padding: 8px 15px; border-radius: 999px;
+    background: rgba(23,20,48,.9); border: 1px solid currentColor;
+    font-size: 14px; line-height: 1.4; text-align: center;
+    white-space: pre-wrap; word-break: break-word; pointer-events: none;
+    animation: noteUp 5s ease-out forwards;
+  }
+  @keyframes noteUp {
+    0%   { opacity: 0; transform: translate(-50%, 22px) scale(.9); }
+    9%   { opacity: 1; transform: translate(-50%, 0) scale(1); }
+    82%  { opacity: 1; transform: translate(-50%, -34px) scale(1); }
+    100% { opacity: 0; transform: translate(-50%, -58px) scale(1); }
+  }
+
+  /* ---------- 顶栏 ---------- */
+  .top {
+    position: absolute; top: 0; left: 0; right: 0; z-index: 8;
+    display: flex; align-items: center; gap: 8px; padding: 11px 13px;
+    font-family: var(--mono); font-size: 11px; color: var(--dim);
+  }
+  .who { display: flex; align-items: center; gap: 7px; min-width: 0; }
+  .who span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .dot { width: 7px; height: 7px; border-radius: 50%; flex: none; background: var(--haze); transition: background .3s, box-shadow .3s; }
+  .dot.on  { background: var(--yours); box-shadow: 0 0 9px var(--yours); }
+  .dot.off { background: var(--mine); animation: blink 1.4s ease-in-out infinite; }
+  @keyframes blink { 50% { opacity: .25; } }
+  .spacer { flex: 1; }
+  #rosterMini { display: none; }
+  .compact #rosterMini { display: inline; }
+  .compact #rosterFull { display: none; }
+
+  .icon {
+    border: 1px solid var(--haze); background: rgba(23,20,48,.6);
+    color: var(--dim); border-radius: 999px; padding: 5px 10px;
+    font-family: var(--mono); font-size: 11px; cursor: pointer; flex: none;
+  }
+  .icon:hover { color: var(--text); border-color: var(--mine); }
+  .icon:focus-visible { outline: 2px solid var(--mine); outline-offset: 2px; }
+  .icon.gone { display: none; }
+
+  /* ---------- 底栏 ---------- */
+  .bottom {
+    position: absolute; left: 0; right: 0; bottom: 0; z-index: 8;
+    display: flex; flex-direction: column; gap: 8px; padding: 10px 12px 12px;
+  }
+  .chips { display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; }
+  .chips::-webkit-scrollbar { display: none; }
+  .chip {
+    flex: none; padding: 6px 12px; border-radius: 999px;
+    border: 1px solid var(--haze); background: rgba(23,20,48,.6);
+    color: var(--dim); font-size: 12px; font-family: var(--sans); cursor: pointer;
+  }
+  .chip:hover { color: var(--text); border-color: var(--mine); }
+  .chip:focus-visible { outline: 2px solid var(--mine); outline-offset: 2px; }
+
+  .compose { display: flex; gap: 6px; }
+  .compose input {
+    flex: 1; min-width: 0; padding: 8px 13px; border-radius: 999px;
+    background: var(--ink-soft); border: 1px solid var(--haze);
+    color: var(--text); font-size: 13px; font-family: var(--sans);
+    -webkit-user-select: text; user-select: text;
+  }
+  .compose input:focus { outline: 2px solid var(--mine); outline-offset: 1px; }
+  .compose button {
+    flex: none; padding: 8px 14px; border-radius: 999px; border: 0;
+    background: var(--haze); color: var(--text);
+    font-size: 12px; font-family: var(--sans); cursor: pointer;
+  }
+  .compose button:hover { background: var(--mine); color: #1a0510; }
+
+  .tally {
+    display: flex; justify-content: space-between; gap: 10px;
+    font-family: var(--mono); font-size: 10.5px; color: var(--dim);
+    letter-spacing: .04em;
+  }
+  .tally b { color: var(--text); font-weight: 500; }
+  .tally .g { color: var(--gold); }
+
+  /* ---------- 攒下的心跳 ---------- */
+  .stash {
+    position: absolute; inset: 0; z-index: 20;
+    display: grid; place-content: center; gap: 14px; padding: 28px;
+    text-align: center; background: rgba(13,11,24,.94);
+    backdrop-filter: blur(8px);
+  }
+  .stash.hide { display: none; }
+  .stash .big { font-size: 34px; color: var(--yours); font-family: var(--mono); }
+  .stash p { margin: 0; font-size: 13px; color: var(--dim); line-height: 1.8; }
+  .stash button {
+    justify-self: center; padding: 11px 24px; border: 0; border-radius: 12px;
+    background: var(--yours); color: #05201d;
+    font-size: 14px; font-weight: 600; font-family: var(--sans); cursor: pointer;
+  }
+
+  /* ---------- 调试面板：网址后面加 ?debug 才出现 ---------- */
+  .dbg {
+    position: fixed; left: 8px; bottom: 8px; z-index: 99;
+    max-width: min(430px, 92vw); max-height: 46vh; overflow: auto;
+    margin: 0; padding: 10px 12px;
+    background: rgba(9,8,18,.94); border: 1px solid var(--haze);
+    border-radius: 10px; white-space: pre-wrap; word-break: break-all;
+    font-family: var(--mono); font-size: 11px; line-height: 1.65;
+    color: var(--dim); -webkit-user-select: text; user-select: text;
+  }
+  .dbg.hide { display: none; }
+
+  /* ---------- 说明 ---------- */
+  .help {
+    position: absolute; inset: 0; z-index: 30;
+    display: grid; place-items: center; padding: 22px;
+    background: rgba(9, 8, 18, .82); backdrop-filter: blur(10px);
+    animation: fadeIn .18s ease;
+  }
+  .help.hide { display: none; }
+  @keyframes fadeIn { from { opacity: 0; } }
+
+  .sheet {
+    width: min(430px, 100%); max-height: 100%;
+    display: flex; flex-direction: column;
+    background: var(--ink-soft); border: 1px solid var(--haze);
+    border-radius: 18px; overflow: hidden;
+  }
+  .sheet-top {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 14px 16px 12px; border-bottom: 1px solid var(--haze);
+  }
+  .eyebrow {
+    font-family: var(--mono); font-size: 11px; letter-spacing: .3em;
+    color: var(--dim); text-transform: uppercase;
+  }
+
+  .rows { overflow-y: auto; padding: 4px 16px 10px; }
+  .row {
+    display: flex; gap: 12px; padding: 13px 0;
+    border-bottom: 1px solid rgba(42,36,80,.5);
+  }
+  .row:last-child { border-bottom: 0; }
+  .row b {
+    display: block; font-size: 13.5px; font-weight: 600;
+    color: var(--text); margin-bottom: 4px;
+  }
+  .row span {
+    display: block; font-size: 12.5px; line-height: 1.75; color: var(--dim);
+  }
+
+  /* 左侧色标，跟界面里的颜色一一对上 */
+  .sw {
+    flex: none; width: 9px; height: 9px; margin-top: 6px;
+    border-radius: 50%; transform: rotate(45deg);
+  }
+  .sw.mine  { background: var(--mine);  box-shadow: 0 0 8px rgba(255,95,141,.6); }
+  .sw.yours { background: var(--yours); box-shadow: 0 0 8px rgba(94,224,208,.6); }
+  .sw.gold  { background: var(--gold);  box-shadow: 0 0 8px rgba(255,215,110,.7); }
+  .sw.dim   { background: var(--haze); }
+
+  .sheet-foot {
+    padding: 11px 16px; border-top: 1px solid var(--haze);
+    font-family: var(--mono); font-size: 10.5px; color: var(--dim);
+    text-align: center;
+  }
+
+  /* ---------- 悬浮窗：默认只剩一颗心 ---------- */
+  /* 窗口本身没法透明，那就让它看起来是心在发光，而不是心贴在黑方块上 */
+  .compact { background: #0b0916; }
+  .compact .aura {
+    display: block; inset: 0; filter: blur(16px);
+    animation: none; transition: background .5s ease;
+    background:
+      radial-gradient(circle at 50% 46%, rgba(255,95,141,.26), transparent 58%),
+      radial-gradient(circle at 50% 46%, rgba(120,70,180,.20), transparent 78%);
+  }
+  .compact #stage.remote .aura {
+    background:
+      radial-gradient(circle at 50% 46%, rgba(94,224,208,.30), transparent 58%),
+      radial-gradient(circle at 50% 46%, rgba(60,140,180,.20), transparent 78%);
+  }
+  .compact #stage.synced .aura {
+    background:
+      radial-gradient(circle at 50% 46%, rgba(255,215,110,.40), transparent 62%),
+      radial-gradient(circle at 50% 46%, rgba(255,140,90,.24), transparent 82%);
+  }
+  .compact #stage { background: transparent; }
+  .compact .heart-btn { width: min(58vmin, 88px); }
+
+  /* 所有界面元素平时藏起来，指针移上去或键盘聚焦时才浮出 */
+  .compact .top,
+  .compact .bottom {
+    opacity: 0; pointer-events: none;
+    transition: opacity .18s ease, transform .18s ease;
+  }
+  .compact .top    { transform: translateY(-6px); }
+  .compact .bottom { transform: translateY(6px); }
+
+  .compact:hover .top,
+  .compact:hover .bottom,
+  .compact:focus-within .top,
+  .compact:focus-within .bottom,
+  .compact.peek .top,
+  .compact.peek .bottom {
+    opacity: 1; pointer-events: auto; transform: none;
+  }
+
+  .compact .top {
+    padding: 6px 8px; font-size: 9.5px;
+    background: linear-gradient(rgba(13,11,24,.92), transparent);
+  }
+  .compact .bottom {
+    padding: 14px 7px 8px; gap: 0;
+    background: linear-gradient(transparent, rgba(13,11,24,.92) 45%);
+  }
+  .compact .compose,
+  .compact .tally,
+  .compact .help,
+  .compact .icon.pop { display: none; }
+  .compact .chip { padding: 4px 9px; font-size: 10.5px; }
+  .compact .icon { padding: 3px 7px; font-size: 9.5px; }
+  .compact .note { font-size: 11.5px; bottom: 30%; padding: 6px 11px; }
+  .compact .sync-label { font-size: 11px; }
+  .compact .stash { padding: 16px; gap: 10px; }
+  .compact .stash .big { font-size: 26px; }
+  .compact .stash p { font-size: 11px; }
+
+  @media (prefers-reduced-motion: reduce) {
+    .heart-btn, .aura { animation: none; }
+    .heart-btn.pop svg, .heart-btn.pop.soft svg { animation: none; }
+    .spark, .ring { animation-duration: 1ms; }
+  }
+</style>
+</head>
+<body>
+
+<div class="gate" id="gate">
+  <h1>Feel My Heartbeat</h1>
+  <p>However far apart you are.<br>One heartbeat.</p>
+  <input id="nameInput" maxlength="12" placeholder="你的名字" autocomplete="off">
+  <input id="keyInput" type="password" placeholder="口令" autocomplete="current-password">
+  <button id="enterBtn">进入</button>
+  <span class="err" id="err"></span>
+</div>
+
+<div id="stage">
+  <div class="aura"></div>
+
+  <button class="heart-btn" id="heart" aria-label="发送心跳，按住可以连发">
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path class="core" d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/>
+    </svg>
+  </button>
+
+  <div class="top">
+    <span class="who">
+      <span class="dot" id="dot"></span>
+      <span id="rosterFull">1 人在线 · 你</span><span id="rosterMini">等 TA 上线</span>
+    </span>
+    <span class="spacer"></span>
+    <button class="icon" id="soundBtn" title="声音">♪</button>
+    <button class="icon pop" id="helpBtn" title="怎么玩">?</button>
+    <button class="icon pop" id="popBtn">悬浮窗</button>
+  </div>
+
+  <div class="bottom">
+    <div class="chips" id="chips"></div>
+    <div class="compose">
+      <input id="noteInput" maxlength="60" placeholder="说句话，会飘在你俩屏幕上" autocomplete="off">
+      <button id="sendNote">送出</button>
+    </div>
+    <div class="tally">
+      <span>今天 <b id="todayN">0</b>　你 <b id="mineN">0</b>　TA <b id="yoursN">0</b></span>
+      <span>同频 <b class="g" id="syncN">0</b>　共 <b id="totalN">0</b></span>
+    </div>
+  </div>
+
+  <div class="help hide" id="help">
+    <div class="sheet">
+      <div class="sheet-top">
+        <span class="eyebrow">怎么玩</span>
+        <button class="icon" id="helpClose">关闭</button>
+      </div>
+
+      <div class="rows">
+        <div class="row">
+          <i class="sw mine"></i>
+          <div>
+            <b>点一下</b>
+            <span>两边同时冒出小爱心。你发的是粉色，TA 发的是青色，颜色不用记，看一眼就知道是谁。</span>
+          </div>
+        </div>
+
+        <div class="row">
+          <i class="sw mine"></i>
+          <div>
+            <b>按住不放</b>
+            <span>连发。大爱心会跟着急促跳动，松手才停。空格键同理，按住也连发。</span>
+          </div>
+        </div>
+
+        <div class="row">
+          <i class="sw gold"></i>
+          <div>
+            <b>同频</b>
+            <span>两个人在三秒内先后点了，两边一起爆开金色。这个刷不出来，只有你俩真的同时在看屏幕时才会撞上。</span>
+          </div>
+        </div>
+
+        <div class="row">
+          <i class="sw yours"></i>
+          <div>
+            <b>TA 不在的时候</b>
+            <span>你点的每一下都替你存着。等 TA 打开网页，会先看到一共攒了多少，按一下全部放出来。</span>
+          </div>
+        </div>
+
+        <div class="row">
+          <i class="sw yours"></i>
+          <div>
+            <b>说句话</b>
+            <span>下面三个快捷词，或者自己打字，六十个字以内。会飘过两边的屏幕，看完就没了，不留记录。</span>
+          </div>
+        </div>
+
+        <div class="row">
+          <i class="sw mine"></i>
+          <div>
+            <b>悬浮窗</b>
+            <span>开一个始终置顶的小窗，浮在所有软件之上，切窗口也不会被盖住。平时只有一颗心，鼠标移上去才浮出快捷词。要 Chrome 或 Edge。</span>
+          </div>
+        </div>
+
+        <div class="row">
+          <i class="sw dim"></i>
+          <div>
+            <b>底下那行数字</b>
+            <span>今天一共多少下、你和 TA 各自多少下、撞上过几次同频、从第一天到现在的总数。</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="sheet-foot">右上角 ♪ 关声音　·　随时点 ? 再看一遍</div>
+    </div>
+  </div>
+
+  <div class="stash hide" id="stash">
+    <div class="big" id="stashBig">0</div>
+    <p id="stashText"></p>
+    <button id="stashBtn">放出来</button>
+  </div>
+</div>
+
+<pre class="dbg hide" id="dbg"></pre>
+
+<script>
+(function () {
+  const $ = id => document.getElementById(id);
+  const gate = $('gate'), nameIn = $('nameInput'), keyIn = $('keyInput'),
+        errEl = $('err'), enterBtn = $('enterBtn'),
+        stage = $('stage'), heart = $('heart'),
+        dot = $('dot'), rosterFull = $('rosterFull'), rosterMini = $('rosterMini'),
+        soundBtn = $('soundBtn'), popBtn = $('popBtn'),
+        helpBox = $('help'), helpBtn = $('helpBtn'), helpClose = $('helpClose'),
+        chipsEl = $('chips'), noteIn = $('noteInput'), sendNote = $('sendNote'),
+        todayN = $('todayN'), mineN = $('mineN'), yoursN = $('yoursN'),
+        syncN = $('syncN'), totalN = $('totalN'),
+        stashBox = $('stash'), stashBig = $('stashBig'),
+        stashText = $('stashText'), stashBtn = $('stashBtn');
+
+  const HEART = 'M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z';
+  const C = { mine: '#ff5f8d', yours: '#5ee0d0', gold: '#ffd76e' };
+  const QUICK = ['想你了', '在干嘛', '抱抱'];
+
+  let myName = '', myKey = '', myId = '';
+  let remoteTimer = null, syncTimer = null;
+  let graceTimer = null, reconnectTimer = null;
+  let soundOn = true;
+  let togetherFrom = 0;
+
+  const doc = () => stage.ownerDocument;
+  const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  /* ================= 调试 ================= */
+  // 网址后面加 ?debug，左下角会显示服务器推来的原始名单
+  const VERSION = '1.0.0';
+  const DEBUG = new URLSearchParams(location.search).has('debug');
+  const dbgEl = $('dbg');
+  let lastOnline = null, lastTag = '还没收到事件';
+
+  function dump(tag) {
+    if (tag) lastTag = tag;
+    if (!DEBUG) return;
+    dbgEl.classList.remove('hide');
+    const rs = !myId ? '正在加入' : (running ? '轮询中' : '已停止');
+    dbgEl.textContent =
+      '前端版本     ' + VERSION + '  传输 长轮询\n' +
+      '服务端版本   ' + serverVersion + (serverVersion === VERSION ? '  一致' : '  ⚠ 不一致') + '\n' +
+      '我填的名字   ' + JSON.stringify(myName) + '\n' +
+      '我的连接 id  ' + (myId || '（还没拿到）') + '\n' +
+      '连接状态     ' + rs + (offline ? ' · 离线' : '') + '\n' +
+      '往返延迟     ' + (lastRtt === null ? '还没测到' : lastRtt + ' ms') + '\n' +
+      '最后一个事件 ' + lastTag + '  ' + new Date().toLocaleTimeString() + '\n' +
+      '服务器名单   ' + JSON.stringify(lastOnline);
+  }
+
+  /* ================= 声音 ================= */
+  let ac = null;
+  function tone(freqs, dur, vol) {
+    if (!soundOn) return;
+    try {
+      if (!ac) ac = new (window.AudioContext || window.webkitAudioContext)();
+      if (ac.state === 'suspended') ac.resume();
+      freqs.forEach((f, i) => {
+        const o = ac.createOscillator(), g = ac.createGain();
+        o.type = 'sine';
+        o.frequency.value = f;
+        const t0 = ac.currentTime + i * 0.055;
+        g.gain.setValueAtTime(0, t0);
+        g.gain.linearRampToValueAtTime(vol, t0 + 0.015);
+        g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+        o.connect(g); g.connect(ac.destination);
+        o.start(t0); o.stop(t0 + dur + 0.05);
+      });
+    } catch (e) {}
+  }
+
+  function setSound(on) {
+    soundOn = on;
+    soundBtn.textContent = on ? '♪' : '♪̸';
+    soundBtn.style.color = on ? 'var(--text)' : 'var(--dim)';
+    try { localStorage.setItem('heart-sound', on ? '1' : '0'); } catch (e) {}
+  }
+
+  /* ================= 粒子 ================= */
+  function spark(color, spread) {
+    const d = doc();
+    const el = d.createElement('span');
+    el.className = 'spark';
+    const a = Math.random() * Math.PI * 2;
+    const dist = (spread || 1) * (85 + Math.random() * 130);
+    el.style.setProperty('--tx', (Math.cos(a) * dist).toFixed(1) + 'px');
+    el.style.setProperty('--ty', (Math.sin(a) * dist - 40).toFixed(1) + 'px');
+    el.style.setProperty('--sc', (0.5 + Math.random() * 0.9).toFixed(2));
+    el.style.setProperty('--rot', (Math.random() * 200 - 100).toFixed(0) + 'deg');
+    el.style.setProperty('--dur', (1000 + Math.random() * 700).toFixed(0) + 'ms');
+
+    const svg = d.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    svg.setAttribute('viewBox', '0 0 24 24');
+    const p = d.createElementNS('http://www.w3.org/2000/svg', 'path');
+    p.setAttribute('d', HEART);
+    p.setAttribute('fill', color);
+    svg.appendChild(p);
+    el.appendChild(svg);
+    stage.appendChild(el);
+    el.addEventListener('animationend', () => el.remove());
+  }
+
+  function ring(color) {
+    const el = doc().createElement('span');
+    el.className = 'ring';
+    el.style.color = color;
+    stage.appendChild(el);
+    el.addEventListener('animationend', () => el.remove());
+  }
+
+  // 重新播放动画要先把类摘掉、强制回流，否则连点第二下不会有反应
+  function popHeart(soft) {
+    if (reduced) return;
+    heart.classList.remove('pop', 'soft');
+    void heart.offsetWidth;
+    heart.classList.add('pop');
+    if (soft) heart.classList.add('soft');
+  }
+
+  heart.addEventListener('animationend', e => {
+    if (e.animationName === 'pop' || e.animationName === 'popSoft') {
+      heart.classList.remove('pop', 'soft');
+    }
+  });
+
+  function burst(who, n) {
+    const color = C[who] || C.mine;
+    popHeart(holding);
+    ring(color);
+    const cap = Math.min(n, 26);
+    for (let i = 0; i < cap; i++) setTimeout(() => spark(color), i * 42);
+
+    if (who === 'yours') {
+      stage.classList.add('remote');
+      clearTimeout(remoteTimer);
+      remoteTimer = setTimeout(() => stage.classList.remove('remote'), 1400);
+    }
+    if (navigator.vibrate) navigator.vibrate(who === 'mine' ? 12 : [10, 40, 18]);
+    tone(who === 'mine' ? [660] : [880], 0.5, 0.06);
+  }
+
+  function syncBurst() {
+    stage.classList.add('synced');
+    popHeart(false);
+    clearTimeout(syncTimer);
+    syncTimer = setTimeout(() => stage.classList.remove('synced'), 1900);
+
+    ring(C.gold);
+    setTimeout(() => ring(C.gold), 180);
+    for (let i = 0; i < 30; i++) setTimeout(() => spark(C.gold, 1.5), i * 34);
+
+    const label = doc().createElement('div');
+    label.className = 'sync-label';
+    label.textContent = '同频';
+    stage.appendChild(label);
+    label.addEventListener('animationend', () => label.remove());
+
+    if (navigator.vibrate) navigator.vibrate([16, 50, 16, 50, 40]);
+    tone([523, 659, 784, 1047], 0.9, 0.05);
+  }
+
+  let peekTimer = null;
+  function peek(ms) {
+    const b = doc().body;
+    if (!b.classList.contains('compact')) return;
+    b.classList.add('peek');
+    clearTimeout(peekTimer);
+    peekTimer = setTimeout(() => b.classList.remove('peek'), ms || 2600);
+  }
+
+  function showNote(text, who) {
+    const el = doc().createElement('div');
+    el.className = 'note';
+    el.style.color = C[who] || C.mine;
+    el.textContent = text;
+    stage.appendChild(el);
+    el.addEventListener('animationend', () => el.remove());
+    if (who === 'yours') tone([740, 988], 0.4, 0.05);
+  }
+
+  /* ================= 发送 ================= */
+  let pending = 0, flushTimer = null;
+
+  // 发送一条消息。长轮询下就是一个普通的 POST
+  function wsSend(obj) {
+    if (!myId) return false;
+    fetch('/send', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(Object.assign({ id: myId, key: myKey }, obj)),
+    }).then(r => { if (r.status === 410) rejoin(); }).catch(() => {});
+    return true;
+  }
+
+  function flush() {
+    flushTimer = null;
+    if (!pending) return;
+    const n = pending; pending = 0;
+    const nonce = Math.random().toString(36).slice(2, 8);
+    markSent(nonce);
+    wsSend({ t: 'tap', burst: n, n: nonce });
+  }
+
+  function queue(n) {
+    pending += n;
+    if (!flushTimer) flushTimer = setTimeout(flush, 420);
+  }
+
+  function tap(n) {
+    const count = n || (7 + Math.floor(Math.random() * 5));
+    burst('mine', count);
+    queue(count);
+  }
+
+  // 量一次完整往返：POST 出去 → 服务端广播 → 自己从 SSE 收回来
+  const rttWait = new Map();
+  let lastRtt = null;
+  function markSent(nonce) {
+    rttWait.set(nonce, performance.now());
+    setTimeout(() => rttWait.delete(nonce), 15000);
+    if (rttWait.size > 30) rttWait.clear();
+  }
+  function markBack(nonce) {
+    const t0 = rttWait.get(nonce);
+    if (!t0) return;
+    rttWait.delete(nonce);
+    lastRtt = Math.round(performance.now() - t0);
+    dump('往返 ' + lastRtt + 'ms');
+  }
+
+  /* ---- 按住连发 ---- */
+  let holdDelay = null, holdLoop = null, holding = false;
+
+  function holdStart(e) {
+    if (e && e.button > 0) return;
+    if (holding) return;
+    holding = true;
+    if (e && e.pointerId != null) {
+      try { heart.setPointerCapture(e.pointerId); } catch (err) {}
+    }
+    tap();
+    holdDelay = setTimeout(() => {
+      heart.classList.add('held');
+      holdLoop = setInterval(() => {
+        burst('mine', 3);
+        queue(3);
+      }, 200);
+    }, 400);
+  }
+
+  function holdEnd() {
+    holding = false;
+    heart.classList.remove('held');
+    clearTimeout(holdDelay); clearInterval(holdLoop);
+    holdDelay = holdLoop = null;
+    clearTimeout(flushTimer); flushTimer = null; flush();
+  }
+
+  heart.addEventListener('pointerdown', holdStart);
+  heart.addEventListener('pointerup', holdEnd);
+  heart.addEventListener('pointercancel', holdEnd);
+  heart.addEventListener('click', e => e.preventDefault());
+
+  // 空格键，按住同样连发
+  function keyTarget(ev) {
+    const t = ev.target;
+    return t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA');
+  }
+  function bindKeys(w) {
+    w.addEventListener('keydown', e => {
+      if (e.code !== 'Space' || keyTarget(e)) return;
+      if (!gate.classList.contains('hide')) return;   // 还没进门
+      if (!helpBox.classList.contains('hide')) return; // 说明面板开着
+      e.preventDefault();
+      if (!e.repeat) holdStart();
+    });
+    w.addEventListener('keyup', e => {
+      if (e.code === 'Space' && !keyTarget(e)) holdEnd();
+    });
+  }
+  bindKeys(window);
+
+  /* ---- 纸条 ---- */
+  function sendText(text) {
+    const t = String(text || '').trim().slice(0, 60);
+    if (!t) return;
+    showNote(t, 'mine');
+    wsSend({ t: 'note', text: t });
+  }
+
+  QUICK.forEach(q => {
+    const b = document.createElement('button');
+    b.className = 'chip';
+    b.textContent = q;
+    b.addEventListener('click', () => sendText(q));
+    chipsEl.appendChild(b);
+  });
+
+  sendNote.addEventListener('click', () => { sendText(noteIn.value); noteIn.value = ''; });
+  noteIn.addEventListener('keydown', e => {
+    if (e.key === 'Enter') { sendText(noteIn.value); noteIn.value = ''; }
+  });
+
+  /* ================= 计数 / 状态 ================= */
+  // 记住对方叫什么，这样 TA 离线时统计也不会算错
+  let peerNames = [];
+  try { peerNames = JSON.parse(localStorage.getItem('heart-peers') || '[]'); } catch (e) {}
+
+  function rememberPeers(names) {
+    const add = names.filter(n => n !== myName && !peerNames.includes(n));
+    if (!add.length) return;
+    peerNames = [...peerNames, ...add].slice(-3);
+    try { localStorage.setItem('heart-peers', JSON.stringify(peerNames)); } catch (e) {}
+  }
+
+  function paint(s) {
+    if (!s) return;
+    const by = s.todayByName || {};
+    rememberPeers(s.在线名字 || []);
+
+    todayN.textContent = s.today || 0;
+    totalN.textContent = s.total || 0;
+    syncN.textContent = s.syncs || 0;
+    mineN.textContent = by[myName] || 0;
+
+    // 只算认识的那几个名字，历史调试数据不参与
+    let other = 0;
+    for (const n of peerNames) other += by[n] || 0;
+    yoursN.textContent = other;
+  }
+
+  function mmss() {
+    const sec = Math.max(0, Math.floor((Date.now() - togetherFrom) / 1000));
+    return String(Math.floor(sec / 60)).padStart(2, '0') + ':' + String(sec % 60).padStart(2, '0');
+  }
+
+  // 服务端发来的是连接列表，同一个人可能开了好几台设备
+  let roster = { people: 1, list: '你', peer: '' };
+  let offline = false;
+
+  function renderStatus() {
+    if (offline) {
+      rosterFull.textContent = '断线了，重连中';
+      rosterMini.textContent = '重连中';
+      return;
+    }
+    const t = togetherFrom ? ' · 同在 ' + mmss() : '';
+    rosterFull.textContent = roster.people + ' 人在线 · ' + roster.list + t;
+    rosterMini.textContent = roster.peer ? roster.peer + ' ' + mmss() : '等 TA 上线';
+  }
+
+  function tick() { if (togetherFrom) renderStatus(); }
+  setInterval(tick, 1000);
+
+  /* ================= 攒下的心跳 ================= */
+  function playStash(d) {
+    const hearts = d.hearts || {};
+    const notes = d.notes || [];
+    const total = Object.values(hearts).reduce((a, b) => a + b, 0);
+    if (!total && !notes.length) return;
+
+    const who = Object.keys(hearts)[0] || (notes[0] && notes[0].name) || 'TA';
+    stashBig.textContent = total || notes.length;
+    stashText.textContent = total
+      ? '你不在的时候，' + who + ' 点了这么多下。'
+      : who + ' 留了 ' + notes.length + ' 张纸条。';
+    stashBox.classList.remove('hide');
+
+    stashBtn.onclick = () => {
+      stashBox.classList.add('hide');
+      let step = 0;
+      const rounds = Math.min(Math.ceil(total / 6), 12);
+      const timer = setInterval(() => {
+        burst('yours', 6);
+        if (++step >= rounds) clearInterval(timer);
+      }, 420);
+      notes.forEach((n, i) => setTimeout(() => showNote(n.text, 'yours'), 900 + i * 1600));
+    };
+  }
+
+  /* ================= 连接 ================= */
+  // ================= 长轮询 =================
+  let running = false;      // 轮询循环是否在跑
+  let poking = false;       // 是否正在 join，避免重复
+
+  function connect() { startPoll(); }
+
+  async function startPoll() {
+    if (poking || running) return;
+    poking = true;
+    try {
+      const r = await fetch('/join?key=' + encodeURIComponent(myKey) +
+                            '&name=' + encodeURIComponent(myName), { method: 'POST' });
+      if (!r.ok) throw new Error('join ' + r.status);
+      myId = (await r.json()).id;
+      alive();
+      running = true;
+      poking = false;
+      pollLoop();
+    } catch (e) {
+      poking = false;
+      dump('连不上，重试中');
+      markOffline();
+      clearTimeout(reconnectTimer);
+      reconnectTimer = setTimeout(startPoll, 2000);
+    }
+  }
+
+  // 服务端把我忘了（410），重新排队
+  function rejoin() {
+    myId = ''; running = false;
+    startPoll();
+  }
+
+  async function pollLoop() {
+    while (running && myId) {
+      try {
+        const r = await fetch('/poll?key=' + encodeURIComponent(myKey) + '&id=' + myId);
+        if (r.status === 410) return rejoin();
+        if (r.status === 204) continue;            // 上一个请求被顶替，接着挂
+        if (!r.ok) throw new Error(String(r.status));
+        alive();
+        const batch = await r.json();
+        for (const m of batch) handle(m.ev, m.data || {});
+      } catch (e) {
+        dump('轮询中断，重试中');
+        markOffline();
+        await new Promise(res => setTimeout(res, 1500));
+      }
+    }
+    running = false;
+  }
+
+  // 六秒宽限：短暂抖动不打扰，真断了才显示离线
+  function markOffline() {
+    if (graceTimer) return;
+    graceTimer = setTimeout(() => {
+      graceTimer = null;
+      offline = true;
+      dot.classList.remove('on');
+      dot.classList.add('off');
+      renderStatus();
+    }, 6000);
+  }
+
+  function alive() {
+    clearTimeout(graceTimer); graceTimer = null;
+    offline = false;
+    dot.classList.remove('off');
+  }
+
+  // 关页面时打一枪，让服务器立刻知道人走了，不用等超时
+  window.addEventListener('pagehide', () => {
+    running = false;
+    clearTimeout(reconnectTimer); reconnectTimer = null;
+    if (!myId) return;
+    try {
+      const blob = new Blob([JSON.stringify({ id: myId, key: myKey })], { type: 'application/json' });
+      navigator.sendBeacon('/leave', blob);
+    } catch (e) {}
+  });
+
+  /* ================= 置顶悬浮窗 ================= */
+  let pipWin = null;
+
+  async function openFloat() {
+    if (!('documentPictureInPicture' in window)) {
+      alert('这个浏览器不支持置顶悬浮窗。\n用 Chrome 或 Edge（116 以上）打开就可以了。\n另外网址必须是 https 或 localhost。');
+      return;
+    }
+    if (pipWin) { pipWin.focus(); return; }
+    setHelp(false);
+
+    pipWin = await documentPictureInPicture.requestWindow({ width: 200, height: 200 });
+    pipWin.document.head.appendChild(document.getElementById('app-css').cloneNode(true));
+    pipWin.document.title = '心跳';
+    const b = pipWin.document.body;
+    b.style.margin = '0';
+    b.style.height = '100vh';
+    b.classList.add('compact');
+    b.appendChild(stage);            // 整块搬过去，事件监听跟着 DOM 走
+    bindKeys(pipWin);
+    popBtn.classList.add('gone');
+
+    pipWin.addEventListener('pagehide', () => {
+      document.body.appendChild(stage);
+      popBtn.classList.remove('gone');
+      pipWin = null;
+    });
+  }
+
+  popBtn.addEventListener('click', openFloat);
+  soundBtn.addEventListener('click', () => setSound(!soundOn));
+
+  /* ================= 说明 ================= */
+  function setHelp(open) {
+    helpBox.classList.toggle('hide', !open);
+    if (open) helpClose.focus(); else heart.focus();
+  }
+  const helpOpen = () => !helpBox.classList.contains('hide');
+
+  helpBtn.addEventListener('click', () => setHelp(true));
+  helpClose.addEventListener('click', () => setHelp(false));
+  helpBox.addEventListener('click', e => { if (e.target === helpBox) setHelp(false); });
+  window.addEventListener('keydown', e => { if (e.key === 'Escape' && helpOpen()) setHelp(false); });
+
+  /* ================= 进门 ================= */
+  function fail(msg) {
+    errEl.textContent = msg;
+    errEl.classList.add('show');
+    enterBtn.disabled = false;
+    enterBtn.textContent = '进入';
+  }
+
+  async function start() {
+    const v = nameIn.value.trim(), k = keyIn.value;
+    if (!v) return nameIn.focus();
+    if (!k) return keyIn.focus();
+
+    errEl.classList.remove('show');
+    enterBtn.disabled = true;
+    enterBtn.textContent = '核对中';
+
+    let res;
+    try { res = await fetch('/check?key=' + encodeURIComponent(k)); }
+    catch (e) { return fail('连不上服务器'); }
+    if (res.status === 401) return fail('口令不对');
+    if (!res.ok) return fail('服务器出错了 ' + res.status);
+
+    try {
+      const info = await res.json();
+      serverVersion = info.version || '未知';
+    } catch (e) {
+      serverVersion = '旧版';     // 老服务端的 /check 返回 204，没有 JSON
+    }
+    if (serverVersion !== VERSION) {
+      return fail('服务端是 ' + serverVersion + '，前端是 ' + VERSION + '，请更新 server.js 并重启');
+    }
+
+    myName = v; myKey = k;
+    try {
+      localStorage.setItem('heart-name', v);
+      localStorage.setItem('heart-key', k);
+    } catch (e) {}
+    gate.classList.add('hide');
+    connect();
+
+    // 第一次进来先把玩法讲一遍，之后不再自动弹
+    try {
+      if (!localStorage.getItem('heart-seen-help')) {
+        setHelp(true);
+        localStorage.setItem('heart-seen-help', '1');
+      }
+    } catch (e) {}
+  }
+
+  enterBtn.addEventListener('click', start);
+  [nameIn, keyIn].forEach(el => {
+    el.addEventListener('keydown', e => { if (e.key === 'Enter') start(); });
+    el.addEventListener('input', () => errEl.classList.remove('show'));
+  });
+
+  try {
+    const n = localStorage.getItem('heart-name');
+    const k = localStorage.getItem('heart-key');
+    if (n) nameIn.value = n;
+    if (k) keyIn.value = k;
+    setSound(localStorage.getItem('heart-sound') !== '0');
+  } catch (e) { setSound(true); }
+  (nameIn.value ? keyIn : nameIn).focus();
+})();
+</script>
+</body>
+</html>
