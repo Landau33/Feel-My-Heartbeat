@@ -584,7 +584,7 @@
 
   /* ================= 调试 ================= */
   // 网址后面加 ?debug，左下角会显示服务器推来的原始名单
-  const VERSION = '1.1.1';
+  const VERSION = '1.1.2';
   const DEBUG = new URLSearchParams(location.search).has('debug');
   const dbgEl = $('dbg');
   let lastOnline = null, lastTag = '还没收到事件';
@@ -611,10 +611,12 @@
         histBody = $('histBody'), histReload = $('histReload');
   let histTimer = null;
 
-  function hhmmss(t) {
+  // 260727 14:26:01。服务端已经附了 time 字段，这个是拿不到时的兜底
+  function when(t) {
     const d = new Date(t);
     const p = n => String(n).padStart(2, '0');
-    return p(d.getHours()) + ':' + p(d.getMinutes()) + ':' + p(d.getSeconds());
+    return String(d.getFullYear()).slice(2) + p(d.getMonth() + 1) + p(d.getDate()) +
+           ' ' + p(d.getHours()) + ':' + p(d.getMinutes()) + ':' + p(d.getSeconds());
   }
 
   function histRender(notes) {
@@ -624,7 +626,7 @@
     for (const n of notes) {
       const line = document.createElement('div');
       const time = document.createElement('i');
-      time.textContent = hhmmss(n.t) + ' ';
+      time.textContent = (n.time || when(n.t)) + '  ';
       const who = document.createElement('b');
       who.textContent = n.name + ' ';
       if (n.name === myName) who.className = 'me';

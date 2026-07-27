@@ -13,7 +13,7 @@ const crypto = require('crypto');
 
 // 版本号以 package.json 为准，代码里不再各写一份。
 // 升版本只改 package.json（或用 npm version）
-let VERSION = '1.1.1';
+let VERSION = '1.1.2';
 try { VERSION = require('./package.json').version || VERSION; } catch (e) {}
 
 const PORT = process.env.PORT || 8787;
@@ -72,6 +72,14 @@ function stamp(d) {
   return d.getFullYear() + p(d.getMonth() + 1) + p(d.getDate());
 }
 
+// 给人看的时间：260727 14:26:01。落盘的还是毫秒时间戳，这个只在接口里附带
+function human(t) {
+  const d = new Date(t);
+  const p = n => String(n).padStart(2, '0');
+  return String(d.getFullYear()).slice(2) + p(d.getMonth() + 1) + p(d.getDate()) +
+         ' ' + p(d.getHours()) + ':' + p(d.getMinutes()) + ':' + p(d.getSeconds());
+}
+
 function logNote(name, text, t) {
   const line = JSON.stringify({ t, name, text }) + '\n';
   fs.mkdir(HISTORY_DIR, { recursive: true }, err => {
@@ -95,7 +103,8 @@ function historyRead(date) {
   return raw.split('\n')
     .filter(Boolean)
     .map(l => { try { return JSON.parse(l); } catch (e) { return null; } })
-    .filter(Boolean);
+    .filter(Boolean)
+    .map(x => ({ t: x.t, time: x.t ? human(x.t) : '', name: x.name, text: x.text }));
 }
 
 // ---------- 在线连接 ----------
