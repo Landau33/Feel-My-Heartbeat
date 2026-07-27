@@ -8,3 +8,6 @@ node_modules/
 
 # 日志
 *.log
+
+# 运行时数据（含纸条内容，不进仓库）
+hearts.json
