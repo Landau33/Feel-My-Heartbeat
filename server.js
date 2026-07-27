@@ -13,7 +13,7 @@ const crypto = require('crypto');
 
 // 版本号以 package.json 为准，代码里不再各写一份。
 // 升版本只改 package.json（或用 npm version）
-let VERSION = '1.1.0';
+let VERSION = '1.1.1';
 try { VERSION = require('./package.json').version || VERSION; } catch (e) {}
 
 const PORT = process.env.PORT || 8787;
@@ -129,15 +129,18 @@ function flush(client) {
 }
 
 function drop(client) {
-  if (!client || !clients.has(client)) return;
+  if (!client) return;
   clients.delete(client);
   clearTimeout(client.waitTimer);
   if (client.waiting) { try { client.waiting.writeHead(204); client.waiting.end(); } catch (e) {} }
 }
 
+// 必须当场从名单里摘掉。admit 那边是 while (clients.size >= MAX_CLIENTS)，
+// 如果等 100 毫秒后才删，size 一直不变，那个循环就转死了。
 function evict(client) {
-  if (!client) return;
-  send(client, 'evicted', { why: 'replaced' });
+  if (!client || !clients.has(client)) return;
+  clients.delete(client);
+  send(client, 'evicted', { why: 'replaced' });   // 消息还在队列里，有 poll 挂着就立刻发出去
   setTimeout(() => drop(client), 100);
 }
 

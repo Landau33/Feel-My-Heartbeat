@@ -584,7 +584,7 @@
 
   /* ================= 调试 ================= */
   // 网址后面加 ?debug，左下角会显示服务器推来的原始名单
-  const VERSION = '1.1.0';
+  const VERSION = '1.1.1';
   const DEBUG = new URLSearchParams(location.search).has('debug');
   const dbgEl = $('dbg');
   let lastOnline = null, lastTag = '还没收到事件';
@@ -979,8 +979,33 @@
   // 服务端发来的是连接列表，同一个人可能开了好几台设备
   let roster = { people: 1, list: '你', peer: '' };
   let offline = false;
+  let kicked = false;
+
+  // 服务端给的是连接列表，同一个人可能开了好几台设备，按名字合并
+  function applyRoster(online) {
+    const n = new Map();
+    for (const c of online) n.set(c.name, (n.get(c.name) || 0) + 1);
+    const names = [...n.keys()];
+
+    roster.people = names.length || 1;
+    roster.list = names
+      .map(x => (x === myName ? '你' : x) + (n.get(x) > 1 ? ' ×' + n.get(x) : ''))
+      .join('、') || '你';
+    roster.peer = names.find(x => x !== myName) || '';
+
+    // TA 在的这段时间开始计时，人走了就归零
+    if (roster.peer && !togetherFrom) togetherFrom = Date.now();
+    if (!roster.peer) togetherFrom = 0;
+
+    renderStatus();
+  }
 
   function renderStatus() {
+    if (kicked) {
+      rosterFull.textContent = '这个连接被顶掉了，刷新页面重来';
+      rosterMini.textContent = '已断开';
+      return;
+    }
     if (offline) {
       rosterFull.textContent = '断线了，重连中';
       rosterMini.textContent = '重连中';
@@ -1054,6 +1079,57 @@
     startPoll();
   }
 
+  // ---- 服务端事件分发 ----
+  // 每条消息都是 { ev, data }。tap 和 note 是广播，自己发的也会原样回来，
+  // 靠 from 认出来，别再播一遍。
+  function handle(ev, d) {
+    if (ev === 'welcome') {
+      if (d.name) myName = d.name;          // 服务端会把名字截到 12 字
+      if (d.version) serverVersion = d.version;
+      paint(d.stats);
+
+    } else if (ev === 'presence') {
+      lastOnline = d.online || [];
+      paint(d.stats);
+      applyRoster(lastOnline);
+
+    } else if (ev === 'tap') {
+      if (d.from === myId) {
+        markBack(d.n);                      // 自己那一下，本地已经播过了，只用来量往返
+      } else {
+        const who = d.name === myName ? 'mine' : 'yours';
+        burst(who, d.burst || 8);
+        if (who === 'yours') peek();
+      }
+      paint(d.stats);
+
+    } else if (ev === 'sync') {
+      syncBurst();
+      peek(3200);
+      paint(d.stats);
+
+    } else if (ev === 'note') {
+      if (d.from !== myId) {
+        showNote(d.text, d.name === myName ? 'mine' : 'yours');
+        peek(3600);
+        if (DEBUG) setTimeout(histDates, 300);
+      }
+
+    } else if (ev === 'stash') {
+      playStash(d);
+
+    } else if (ev === 'pong') {
+      markBack(d.n);
+
+    } else if (ev === 'evicted') {
+      kicked = true;
+      running = false;
+      renderStatus();
+    }
+
+    dump(ev);
+  }
+
   async function pollLoop() {
     while (running && myId) {
       try {
@@ -1087,8 +1163,11 @@
 
   function alive() {
     clearTimeout(graceTimer); graceTimer = null;
+    const was = offline;
     offline = false;
     dot.classList.remove('off');
+    dot.classList.add('on');
+    if (was) renderStatus();   // 顶栏还停在「断线了，重连中」，得抹掉
   }
 
   // 关页面时打一枪，让服务器立刻知道人走了，不用等超时
