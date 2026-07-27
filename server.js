@@ -1,4 +1,4 @@
-// 心跳灯塔 · 双人爱心同步服务器
+// Feel My Heartbeat · 双人爱心同步服务器
 // 零依赖，只用 Node.js 内置模块。
 // 运行：ROOM_KEY=你们俩的暗号 node server.js
 //

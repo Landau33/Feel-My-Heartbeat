@@ -1,7 +1,7 @@
 {
-  "name": "heartbeat-lighthouse",
+  "name": "feel-my-heartbeat",
   "version": "1.0.0",
-  "description": "心跳灯塔 · 只有两个人的爱心同步网页，零依赖",
+  "description": "Feel My Heartbeat · 只有两个人的爱心同步网页，零依赖",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"

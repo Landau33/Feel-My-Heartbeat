@@ -1,4 +1,4 @@
-# 心跳灯塔
+# Feel My Heartbeat
 
 只有两个人的房间。你点一下，两边的爱心一起冒。
 
@@ -38,7 +38,7 @@ cd /home/young/WorkSpace/love
 ROOM_KEY=123456 PORT=8787 node server.js
 ```
 
-启动成功会看到「心跳灯塔已启动」和累计次数，日志里也会打印本机地址和局域网地址。
+启动成功会看到「Feel My Heartbeat」和版本号，以及累计心跳、同频次数，日志里也会打印本机地址和局域网地址。
 数据都存在同目录的 `hearts.json`，重启不会丢。
 
 打开 `http://localhost:8787`，填名字和口令进去。
