@@ -4,7 +4,7 @@
 
 零依赖，只用 Node.js 内置模块。两个文件就是全部：`server.js` 和 `index.html`。
 
-项目目录：`/home/young/WorkSpace/love`
+下面命令里的 `<项目目录>` 指 `server.js` 所在的那个文件夹。
 
 ---
 
@@ -17,7 +17,8 @@
 | **服务器** | Node 网站本体，存心跳、发纸条 | `node server.js` | 本机 `8787` |
 | **Cloudflare 隧道** | 把本机 8787 端口暴露到公网，给你一个 `https://xxx.trycloudflare.com` 网址 | `cloudflared tunnel --url http://localhost:8787` | — |
 
-房间口令（ROOM_KEY）：`123456` —— 对方打开网址后要输入这个才能进房间。
+房间口令（ROOM_KEY）：写在项目根目录的 `.env` 里（不进仓库），对方打开网址后要输入它才能进房间。
+下面命令里出现的 `123456` 都是占位的示例口令，换成你自己的。
 
 > ⚠️ 现在用的是**临时隧道（quick tunnel）**。它最大的特点：**每次重启 cloudflared，网址都会变一个新的。** 重启完记得把新网址发给对方。
 >
@@ -34,7 +35,7 @@
 pkill -f "node server.js"
 
 # 2) 进目录，带着口令重新启动
-cd /home/young/WorkSpace/love
+cd <项目目录>
 ROOM_KEY=123456 PORT=8787 node server.js
 ```
 
@@ -46,11 +47,11 @@ ROOM_KEY=123456 PORT=8787 node server.js
 **想让它在后台一直跑、关掉终端也不停：**
 
 ```bash
-cd /home/young/WorkSpace/love
+cd <项目目录>
 ROOM_KEY=123456 PORT=8787 nohup node server.js > server.log 2>&1 &
 ```
 
-之后看日志：`tail -f /home/young/WorkSpace/love/server.log`
+之后看日志：`tail -f server.log`（在项目目录下）
 
 ---
 
@@ -80,7 +81,7 @@ cloudflared tunnel --url http://localhost:8787
 **想让它在后台跑、并且把网址记到文件里：**
 
 ```bash
-cd /home/young/WorkSpace/love
+cd <项目目录>
 nohup cloudflared tunnel --url http://localhost:8787 > tunnel.log 2>&1 &
 
 # 等几秒，把网址捞出来
@@ -123,7 +124,7 @@ curl -s localhost:8787 | head -1
 ## 一键全部重启（先服务器后隧道）
 
 ```bash
-cd /home/young/WorkSpace/love
+cd <项目目录>
 pkill -f "node server.js"; pkill -f "cloudflared tunnel"
 sleep 1
 ROOM_KEY=123456 PORT=8787 nohup node server.js > server.log 2>&1 &

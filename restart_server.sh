@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-cd /home/young/WorkSpace/love
+# 脚本自己所在的目录，从哪儿调用都对
+cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")"
 
 # 从 .env 读取 ROOM_KEY、PORT（KEY=VALUE，每行一个）
 set -a
