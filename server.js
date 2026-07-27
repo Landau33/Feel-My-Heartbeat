@@ -168,7 +168,6 @@ function stats() {
     today: store.day.n,
     todayByName: store.day.byName,
     syncs: store.syncs,
-    在线名字: [...new Set([...clients].map(c => c.name))],
   };
 }
 function presence() {

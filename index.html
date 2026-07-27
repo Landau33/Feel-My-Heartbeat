@@ -605,7 +605,7 @@
 
   /* ================= 调试 ================= */
   // 网址后面加 ?debug，左下角会显示服务器推来的原始名单
-  const VERSION = '1.2.3';
+  const VERSION = '1.2.4';
   const DEBUG = new URLSearchParams(location.search).has('debug');
   const dbgEl = $('dbg');
 
@@ -1027,31 +1027,20 @@
   });
 
   /* ================= 计数 / 状态 ================= */
-  // 记住对方叫什么，这样 TA 离线时统计也不会算错
-  let peerNames = [];
-  try { peerNames = JSON.parse(localStorage.getItem('heart-peers') || '[]'); } catch (e) {}
-
-  function rememberPeers(names) {
-    const add = names.filter(n => n !== myName && !peerNames.includes(n));
-    if (!add.length) return;
-    peerNames = [...peerNames, ...add].slice(-3);
-    try { localStorage.setItem('heart-peers', JSON.stringify(peerNames)); } catch (e) {}
-  }
-
   function paint(s) {
     if (!s) return;
     const by = s.todayByName || {};
-    rememberPeers(s.在线名字 || []);
 
     todayN.textContent = s.today || 0;
     totalN.textContent = s.total || 0;
     syncN.textContent = s.syncs || 0;
-    mineN.textContent = by[myName] || 0;
 
-    // 只算认识的那几个名字，历史调试数据不参与
-    let other = 0;
-    for (const n of peerNames) other += by[n] || 0;
-    yoursN.textContent = other;
+    // TA 就是「今天减去我」。之前是只累加本机记住过的对方名字，
+    // 换台设备、换个浏览器、或者进来时 TA 不在线，那份记忆就是空的，
+    // TA 会一直显示 0，跟「今天」对不上。减法不依赖本机记忆，永远自洽。
+    const mine = by[myName] || 0;
+    mineN.textContent = mine;
+    yoursN.textContent = Math.max(0, (s.today || 0) - mine);
   }
 
   function mmss() {
