@@ -13,7 +13,7 @@ const crypto = require('crypto');
 
 // 版本号以 package.json 为准，代码里不再各写一份。
 // 升版本只改 package.json（或用 npm version）
-let VERSION = '1.1.4';
+let VERSION = '1.1.5';
 try { VERSION = require('./package.json').version || VERSION; } catch (e) {}
 
 const PORT = process.env.PORT || 8787;
@@ -144,11 +144,18 @@ function drop(client) {
   if (client.waiting) { try { client.waiting.writeHead(204); client.waiting.end(); } catch (e) {} }
 }
 
+// 被顶掉的连接 id 记一小会儿。它要是没收到 evicted（页面正好冻着，手里没挂请求），
+// 醒来一 poll 只拿到 410，就会重新 join —— 同一台设备开两个页面时，
+// 两边会没完没了地互相顶。记下来，下次 poll 直接告诉它「你被顶掉了」。
+const evicted = new Map();     // id -> 顶掉的时刻
+const EVICTED_TTL = 120000;
+
 // 必须当场从名单里摘掉。admit 那边是 while (clients.size >= MAX_CLIENTS)，
 // 如果等 100 毫秒后才删，size 一直不变，那个循环就转死了。
 function evict(client) {
   if (!client || !clients.has(client)) return;
   clients.delete(client);
+  evicted.set(client.id, Date.now());
   send(client, 'evicted', { why: 'replaced' });   // 消息还在队列里，有 poll 挂着就立刻发出去
   setTimeout(() => drop(client), 100);
 }
@@ -177,6 +184,7 @@ setInterval(() => {
   for (const c of [...clients]) {
     if (now - c.seen > CLIENT_TIMEOUT) { drop(c); changed = true; }
   }
+  for (const [id, t] of evicted) if (now - t > EVICTED_TTL) evicted.delete(id);
   if (changed) broadcast('presence', presence());
 }, 10000);
 
@@ -196,14 +204,21 @@ function readBody(req, limit) {
 }
 
 // ---------- 新客户端入场 ----------
-function admit(name) {
+function admit(name, dev) {
   const client = {
     id: crypto.randomBytes(5).toString('hex'),
+    dev: String(dev || '').slice(0, 32),
     name: String(name || '匿名').slice(0, 12),
     queue: [], waiting: null, waitTimer: null,
     since: Date.now(), seen: Date.now(),
     capN: 0, capUntil: Date.now() + 10000,
   };
+
+  // 同一台设备重新进来（手机切后台再回来、页面刷新），旧连接多半已经没人管了，
+  // 但要等 60 秒超时才消失，中间就会显示成「你 ×2」。这里当场把它顶掉。
+  if (client.dev) {
+    for (const c of [...clients]) if (c.dev === client.dev) evict(c);
+  }
 
   // 满了就腾位置，挑最久没来取消息的那条
   while (clients.size >= MAX_CLIENTS) {
@@ -317,6 +332,7 @@ const server = http.createServer(async (req, res) => {
       连接: [...clients].map(c => ({
         名字: c.name,
         id: c.id,
+        设备: c.dev || '（没报）',
         已连接秒数: Math.round((now - c.since) / 1000),
         静默秒数: Math.round((now - c.seen) / 1000),
         挂着请求: !!c.waiting,
@@ -363,7 +379,7 @@ const server = http.createServer(async (req, res) => {
   // 进房间，拿一个连接 id
   if (url.pathname === '/join' && req.method === 'POST') {
     if (!keyOk(url.searchParams.get('key'))) { res.writeHead(401); return res.end(); }
-    const client = admit(url.searchParams.get('name'));
+    const client = admit(url.searchParams.get('name'), url.searchParams.get('dev'));
     res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
     return res.end(JSON.stringify({ id: client.id, version: VERSION }));
   }
@@ -371,8 +387,16 @@ const server = http.createServer(async (req, res) => {
   // 取消息。队列有货就立刻回，没有就把请求挂住，等到有消息或超时
   if (url.pathname === '/poll') {
     if (!keyOk(url.searchParams.get('key'))) { res.writeHead(401); return res.end(); }
-    const c = [...clients].find(x => x.id === url.searchParams.get('id'));
-    if (!c) { res.writeHead(410); return res.end(); }   // 服务端不认识你了，重新 join
+    const pollId = url.searchParams.get('id');
+    const c = [...clients].find(x => x.id === pollId);
+    if (!c) {
+      // 被顶掉的，明说一声，别让它闷头重连
+      if (evicted.has(pollId)) {
+        res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
+        return res.end(JSON.stringify([{ ev: 'evicted', data: { why: 'replaced' } }]));
+      }
+      res.writeHead(410); return res.end();             // 服务端不认识你了，重新 join
+    }
 
     c.seen = Date.now();
     // 同一个客户端如果有旧的挂起请求，先放掉
@@ -398,8 +422,10 @@ const server = http.createServer(async (req, res) => {
   if (url.pathname === '/send' && req.method === 'POST') {
     const data = await readBody(req, 4000);
     if (!keyOk(data.key)) { res.writeHead(401); return res.end(); }
-    const c = [...clients].find(x => x.id === String(data.id || ''));
-    if (!c) { res.writeHead(410); return res.end(); }
+    const sendId = String(data.id || '');
+    const c = [...clients].find(x => x.id === sendId);
+    // 被顶掉的连接不给 410，不然它会重新 join，把顶掉它的那个又顶回去
+    if (!c) { res.writeHead(evicted.has(sendId) ? 409 : 410); return res.end(); }
     onMessage(c, data);
     res.writeHead(204);
     return res.end();

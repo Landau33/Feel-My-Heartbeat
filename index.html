@@ -578,6 +578,18 @@
   const QUICK_MORE = ['早安', '晚安', '爱你', '亲亲', '吃了吗', '我到家了', '辛苦了', '睡了吗'];
 
   let myName = '', myKey = '', myId = '';
+
+  // 这台设备的固定编号，存在本地，刷新和重开都不变。
+  // 服务端靠它认出「还是刚才那台」，把上一条没断干净的连接顶掉，
+  // 不然手机上一切后台再回来，自己会数成两台在线。
+  const myDev = (() => {
+    try {
+      let d = localStorage.getItem('heart-dev');
+      if (!d) { d = Math.random().toString(36).slice(2) + Date.now().toString(36); localStorage.setItem('heart-dev', d); }
+      return d;
+    } catch (e) { return Math.random().toString(36).slice(2); }   // 无痕模式没得存，至少一次会话内是稳的
+  })();
+
   let remoteTimer = null, syncTimer = null;
   let graceTimer = null, reconnectTimer = null;
   let soundOn = true;
@@ -588,7 +600,7 @@
 
   /* ================= 调试 ================= */
   // 网址后面加 ?debug，左下角会显示服务器推来的原始名单
-  const VERSION = '1.1.4';
+  const VERSION = '1.1.5';
   const DEBUG = new URLSearchParams(location.search).has('debug');
   const dbgEl = $('dbg');
   let lastOnline = null, lastTag = '还没收到事件';
@@ -1071,7 +1083,8 @@
     poking = true;
     try {
       const r = await fetch('/join?key=' + encodeURIComponent(myKey) +
-                            '&name=' + encodeURIComponent(myName), { method: 'POST' });
+                            '&name=' + encodeURIComponent(myName) +
+                            '&dev=' + encodeURIComponent(myDev), { method: 'POST' });
       if (!r.ok) throw new Error('join ' + r.status);
       myId = (await r.json()).id;
       alive();
@@ -1204,6 +1217,17 @@
       const blob = new Blob([JSON.stringify({ id: myId, key: myKey })], { type: 'application/json' });
       navigator.sendBeacon('/leave', blob);
     } catch (e) {}
+    myId = '';
+  });
+
+  // 手机上切走再切回来，页面常常是从缓存里原样恢复的。
+  // 刚才 pagehide 已经报过离开、轮询也停了，看着还在其实一条消息都收不到，
+  // 所以这里得主动接回去。
+  window.addEventListener('pageshow', e => {
+    if (!e.persisted || !myKey || kicked || stale) return;
+    myId = '';
+    running = false;
+    startPoll();
   });
 
   /* ================= 置顶悬浮窗 ================= */
