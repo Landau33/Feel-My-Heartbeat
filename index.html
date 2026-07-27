@@ -59,6 +59,10 @@
     font-family: var(--mono); opacity: 0; transition: opacity .2s;
   }
   .err.show { opacity: 1; }
+  .ver {
+    font-family: var(--mono); font-size: 11px; letter-spacing: .18em;
+    color: var(--dim); opacity: .7;
+  }
 
   /* ---------- 舞台：整块会被搬进悬浮窗 ---------- */
   #stage {
@@ -435,6 +439,7 @@
   <input id="keyInput" type="password" placeholder="口令" autocomplete="current-password">
   <button id="enterBtn">进入</button>
   <span class="err" id="err"></span>
+  <span class="ver" id="gateVer"></span>
 </div>
 
 <div id="stage">
@@ -534,7 +539,7 @@
         </div>
       </div>
 
-      <div class="sheet-foot">右上角 ♪ 关声音　·　随时点 ? 再看一遍</div>
+      <div class="sheet-foot">右上角 ♪ 关声音　·　随时点 ? 再看一遍　·　<span id="helpVer"></span></div>
     </div>
   </div>
 
@@ -600,9 +605,14 @@
 
   /* ================= 调试 ================= */
   // 网址后面加 ?debug，左下角会显示服务器推来的原始名单
-  const VERSION = '1.2.0';
+  const VERSION = '1.2.1';
   const DEBUG = new URLSearchParams(location.search).has('debug');
   const dbgEl = $('dbg');
+
+  // 登录页和说明面板里的版本号都从这里填，HTML 里不再写死一遍
+  $('gateVer').textContent = 'v' + VERSION;
+  $('helpVer').textContent = 'v' + VERSION;
+
   let lastOnline = null, lastTag = '还没收到事件';
 
   function dump(tag) {
