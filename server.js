@@ -13,7 +13,7 @@ const crypto = require('crypto');
 
 // 版本号以 package.json 为准，代码里不再各写一份。
 // 升版本只改 package.json（或用 npm version）
-let VERSION = '1.2.1';
+let VERSION = '1.2.3';
 try { VERSION = require('./package.json').version || VERSION; } catch (e) {}
 
 const PORT = process.env.PORT || 8787;
@@ -147,16 +147,17 @@ function drop(client) {
 // 被顶掉的连接 id 记一小会儿。它要是没收到 evicted（页面正好冻着，手里没挂请求），
 // 醒来一 poll 只拿到 410，就会重新 join —— 同一台设备开两个页面时，
 // 两边会没完没了地互相顶。记下来，下次 poll 直接告诉它「你被顶掉了」。
-const evicted = new Map();     // id -> 顶掉的时刻
+const evicted = new Map();     // id -> { t: 顶掉的时刻, why }
 const EVICTED_TTL = 120000;
 
 // 必须当场从名单里摘掉。admit 那边是 while (clients.size >= MAX_CLIENTS)，
 // 如果等 100 毫秒后才删，size 一直不变，那个循环就转死了。
-function evict(client) {
+function evict(client, why) {
   if (!client || !clients.has(client)) return;
+  why = why || 'replaced';
   clients.delete(client);
-  evicted.set(client.id, Date.now());
-  send(client, 'evicted', { why: 'replaced' });   // 消息还在队列里，有 poll 挂着就立刻发出去
+  evicted.set(client.id, { t: Date.now(), why });
+  send(client, 'evicted', { why });   // 消息还在队列里，有 poll 挂着就立刻发出去
   setTimeout(() => drop(client), 100);
 }
 
@@ -184,7 +185,7 @@ setInterval(() => {
   for (const c of [...clients]) {
     if (now - c.seen > CLIENT_TIMEOUT) { drop(c); changed = true; }
   }
-  for (const [id, t] of evicted) if (now - t > EVICTED_TTL) evicted.delete(id);
+  for (const [id, e] of evicted) if (now - e.t > EVICTED_TTL) evicted.delete(id);
   if (changed) broadcast('presence', presence());
 }, 10000);
 
@@ -203,8 +204,15 @@ function readBody(req, limit) {
   });
 }
 
+// 谁连进来的：走隧道时 socket 上只看得到 127.0.0.1，真实地址在头里
+function whereFrom(req) {
+  const fwd = String(req.headers['cf-connecting-ip'] || req.headers['x-forwarded-for'] || '')
+    .split(',')[0].trim();
+  return fwd || req.socket.remoteAddress || '';
+}
+
 // ---------- 新客户端入场 ----------
-function admit(name, dev) {
+function admit(name, dev, req, ver) {
   const client = {
     id: crypto.randomBytes(5).toString('hex'),
     dev: String(dev || '').slice(0, 32),
@@ -212,6 +220,12 @@ function admit(name, dev) {
     queue: [], waiting: null, waitTimer: null,
     since: Date.now(), seen: Date.now(),
     capN: 0, capUntil: Date.now() + 10000,
+    // 只为排查「怎么又多出一台」用：从哪个网址进来的、什么浏览器、页面是哪版
+    入口: String((req && req.headers.host) || ''),
+    ip: whereFrom(req || { headers: {}, socket: {} }),
+    // 别切太短：浏览器名（Safari/604.1、Chrome/150…）在 UA 最末尾，切掉就认不出是什么浏览器了
+    ua: String((req && req.headers['user-agent']) || '').slice(0, 256),
+    ver: String(ver || ''),
   };
 
   // 同一台设备重新进来（手机切后台再回来、页面刷新），旧连接多半已经没人管了，
@@ -227,6 +241,15 @@ function admit(name, dev) {
   clients.add(client);
 
   send(client, 'welcome', { id: client.id, name: client.name, stats: stats(), version: VERSION });
+
+  // 版本对不上的页面（多半是哪台设备上开了很久、一直没刷新的旧标签页）不留在名单里。
+  // 它跑的是旧代码，认不出新事件，自己也不会报设备号 —— 顶不掉、超时又摘不掉，
+  // 就一直挂在在线名单里冒充一台设备。当场请出去，那边会提示刷新。
+  if (client.ver !== VERSION) {
+    evict(client, 'stale');
+    broadcast('presence', presence());
+    return client;
+  }
 
   // 把别人趁你不在时攒下的心跳和纸条交给你
   const hearts = {};
@@ -333,6 +356,10 @@ const server = http.createServer(async (req, res) => {
         名字: c.name,
         id: c.id,
         设备: c.dev || '（没报）',
+        入口: c.入口,
+        来源: c.ip,
+        浏览器: c.ua,
+        页面版本: c.ver || '（没报，是旧页面）',
         已连接秒数: Math.round((now - c.since) / 1000),
         静默秒数: Math.round((now - c.seen) / 1000),
         挂着请求: !!c.waiting,
@@ -379,7 +406,8 @@ const server = http.createServer(async (req, res) => {
   // 进房间，拿一个连接 id
   if (url.pathname === '/join' && req.method === 'POST') {
     if (!keyOk(url.searchParams.get('key'))) { res.writeHead(401); return res.end(); }
-    const client = admit(url.searchParams.get('name'), url.searchParams.get('dev'));
+    const client = admit(url.searchParams.get('name'), url.searchParams.get('dev'),
+                         req, url.searchParams.get('ver'));
     res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
     return res.end(JSON.stringify({ id: client.id, version: VERSION }));
   }
@@ -390,10 +418,11 @@ const server = http.createServer(async (req, res) => {
     const pollId = url.searchParams.get('id');
     const c = [...clients].find(x => x.id === pollId);
     if (!c) {
-      // 被顶掉的，明说一声，别让它闷头重连
+      // 被顶掉的，明说一声，别让它闷头重连。
+      // 队列里那条 evicted 多半已经随着连接一起丢了，所以这里要把原因一并带上
       if (evicted.has(pollId)) {
         res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
-        return res.end(JSON.stringify([{ ev: 'evicted', data: { why: 'replaced' } }]));
+        return res.end(JSON.stringify([{ ev: 'evicted', data: { why: evicted.get(pollId).why } }]));
       }
       res.writeHead(410); return res.end();             // 服务端不认识你了，重新 join
     }
