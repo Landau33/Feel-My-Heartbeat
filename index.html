@@ -600,7 +600,7 @@
 
   /* ================= 调试 ================= */
   // 网址后面加 ?debug，左下角会显示服务器推来的原始名单
-  const VERSION = '1.1.5';
+  const VERSION = '1.2.0';
   const DEBUG = new URLSearchParams(location.search).has('debug');
   const dbgEl = $('dbg');
   let lastOnline = null, lastTag = '还没收到事件';
@@ -1002,6 +1002,9 @@
   let kicked = false;
   let stale = false;
 
+  // 名单里的自己写成「名字（你）」，光一个「你」看不出登录用的是哪个名字
+  const me = () => (myName ? myName + '（你）' : '你');
+
   // 服务端给的是连接列表，同一个人可能开了好几台设备，按名字合并
   function applyRoster(online) {
     const n = new Map();
@@ -1010,8 +1013,8 @@
 
     roster.people = names.length || 1;
     roster.list = names
-      .map(x => (x === myName ? '你' : x) + (n.get(x) > 1 ? ' ×' + n.get(x) : ''))
-      .join('、') || '你';
+      .map(x => (x === myName ? x + '（你）' : x) + (n.get(x) > 1 ? ' ×' + n.get(x) : ''))
+      .join('、') || me();
     roster.peer = names.find(x => x !== myName) || '';
 
     // TA 在的这段时间开始计时，人走了就归零
@@ -1076,7 +1079,7 @@
   let running = false;      // 轮询循环是否在跑
   let poking = false;       // 是否正在 join，避免重复
 
-  function connect() { startPoll(); }
+  function connect() { roster.list = me(); startPoll(); }
 
   async function startPoll() {
     if (poking || running) return;
