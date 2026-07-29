@@ -228,6 +228,32 @@
   .icon:focus-visible { outline: 2px solid var(--mine); outline-offset: 2px; }
   .icon.gone { display: none; }
 
+  /* 正在放的那首。进度不另画一条，直接从左往右把底色铺过去 */
+  .nowplay {
+    position: relative; overflow: hidden; min-width: 0; max-width: 38%;
+    display: flex; align-items: center; gap: 7px;
+    border: 1px solid var(--haze); background: rgba(23,20,48,.6);
+    border-radius: 999px; padding: 5px 10px;
+  }
+  .nowplay::before {
+    content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: var(--p, 0%);
+    background: linear-gradient(90deg, rgba(255,95,141,.22), rgba(94,200,255,.22));
+    transition: width .9s linear;
+  }
+  .nowplay > * { position: relative; }
+  .np-name { color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .np-time { color: var(--dim); flex: none; white-space: nowrap; font-variant-numeric: tabular-nums; }
+  .nowplay.hide, .compact .nowplay { display: none; }   /* 悬浮窗只有 200px 宽，塞不下 */
+
+  /* 窄屏顶栏挤不下四样东西。名单换成短的那版（「TA 03:21」），总时长也收起来，
+     省下的宽度给曲名 —— 长名单在手机上本来也是一截省略号，看不出什么 */
+  @media (max-width: 560px) {
+    #rosterFull { display: none; }
+    #rosterMini { display: inline; }
+    .nowplay { max-width: 46%; }
+    .np-dur { display: none; }
+  }
+
   /* ---------- 底栏 ---------- */
   .bottom {
     position: absolute; left: 0; right: 0; bottom: 0; z-index: 8;
@@ -481,7 +507,12 @@
       <span id="rosterFull">1 人在线 · 你</span><span id="rosterMini">等 TA 上线</span>
     </span>
     <span class="spacer"></span>
+    <span class="nowplay hide" id="nowPlay">
+      <span class="np-name" id="npName"></span>
+      <span class="np-time"><span id="npCur">0:00</span><span class="np-dur" id="npDur"></span></span>
+    </span>
     <button class="icon" id="soundBtn" title="声音">♪</button>
+    <button class="icon" id="bgmBtn" title="两个人都在的时候放音乐">♫</button>
     <button class="icon pop" id="helpBtn" title="怎么玩">?</button>
     <button class="icon pop" id="popBtn">悬浮窗</button>
   </div>
@@ -547,6 +578,14 @@
         </div>
 
         <div class="row">
+          <i class="sw gold"></i>
+          <div>
+            <b>同在时的音乐</b>
+            <span>两个人都在的时候，服务器 music 文件夹里的歌会随机放起来，一首接一首，人走了就慢慢淡掉。顶栏显示正在放哪首、放到哪儿了，右上角 ♫ 随时关。</span>
+          </div>
+        </div>
+
+        <div class="row">
           <i class="sw mine"></i>
           <div>
             <b>悬浮窗</b>
@@ -563,7 +602,7 @@
         </div>
       </div>
 
-      <div class="sheet-foot">右上角 ♪ 关声音　·　随时点 ? 再看一遍　·　<span id="helpVer"></span></div>
+      <div class="sheet-foot">右上角 ♪ 关声音　·　♫ 关同在时的音乐　·　随时点 ? 再看一遍　·　<span id="helpVer"></span></div>
     </div>
   </div>
 
@@ -591,7 +630,8 @@
         errEl = $('err'), enterBtn = $('enterBtn'),
         stage = $('stage'), heart = $('heart'), motesBox = $('motes'),
         dot = $('dot'), rosterFull = $('rosterFull'), rosterMini = $('rosterMini'),
-        soundBtn = $('soundBtn'), popBtn = $('popBtn'),
+        soundBtn = $('soundBtn'), bgmBtn = $('bgmBtn'), popBtn = $('popBtn'),
+        nowPlay = $('nowPlay'), npName = $('npName'), npCur = $('npCur'), npDur = $('npDur'),
         helpBox = $('help'), helpBtn = $('helpBtn'), helpClose = $('helpClose'),
         chipsEl = $('chips'), noteIn = $('noteInput'), sendNote = $('sendNote'),
         todayN = $('todayN'), mineN = $('mineN'), yoursN = $('yoursN'),
@@ -622,6 +662,7 @@
   let remoteTimer = null, syncTimer = null;
   let graceTimer = null, reconnectTimer = null;
   let soundOn = true;
+  let bgmPref = true;
   let togetherFrom = 0;
 
   const doc = () => stage.ownerDocument;
@@ -629,7 +670,7 @@
 
   /* ================= 调试 ================= */
   // 网址后面加 ?debug，左下角会显示服务器推来的原始名单
-  const VERSION = '1.2.7';
+  const VERSION = '1.2.9';
   const DEBUG = new URLSearchParams(location.search).has('debug');
   const dbgEl = $('dbg');
 
@@ -819,6 +860,163 @@
     soundBtn.textContent = on ? '♪' : '♪̸';
     soundBtn.style.color = on ? 'var(--text)' : 'var(--dim)';
     try { localStorage.setItem('heart-sound', on ? '1' : '0'); } catch (e) {}
+  }
+
+  /* ================= 同在时的音乐 ================= */
+  // 曲子放在服务器的 ./music 文件夹里，两个人都在的时候随机一首接一首地放，
+  // 人一走就淡出。放什么全看文件夹里有什么，前端只管拿清单。
+  const BGM_VOL  = 0.32;    // 音量，别盖过心跳的提示音
+  const BGM_FADE = 2000;    // 淡入淡出各用多少毫秒
+
+  let bgmWant = false;      // 真正在放没有 = 开关开着 且 两个人都在
+  let bgmEl = null, bgmTracks = [], bgmBag = [], bgmNow = '';
+  let bgmBlocked = false, bgmFails = 0, bgmDead = false, bgmFade = null;
+
+  function bgmAudio() {
+    if (bgmEl) return bgmEl;
+    bgmEl = new Audio();      // 挂在主文档上，整块 stage 搬进悬浮窗也不会断
+    bgmEl.volume = 0;
+    bgmEl.addEventListener('ended', () => { bgmFails = 0; bgmNext(); });
+    bgmEl.addEventListener('error', () => bgmFail(bgmNow));
+    // timeupdate 每秒来三四次，够画进度了，不用自己开定时器
+    ['timeupdate', 'loadedmetadata', 'play', 'pause'].forEach(ev => bgmEl.addEventListener(ev, nowRender));
+    return bgmEl;
+  }
+
+  /* ---- 顶栏上「正在放什么」 ---- */
+  function mmssOf(s) {
+    if (!isFinite(s) || s < 0) return '--:--';
+    s = Math.floor(s);
+    return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0');
+  }
+
+  function nowRender() {
+    const a = bgmEl;
+    const on = !!(bgmNow && a && !a.paused);
+    nowPlay.classList.toggle('hide', !on);
+    if (!on) return;
+    npName.textContent = bgmNow.replace(/\.[^.]+$/, '');   // 扩展名不用给人看
+    nowPlay.title = bgmNow;                                // 名字长了会截断，全名放这儿
+    npCur.textContent = mmssOf(a.currentTime);
+    npDur.textContent = a.duration ? ' / ' + mmssOf(a.duration) : '';
+    nowPlay.style.setProperty('--p', (a.duration ? (a.currentTime / a.duration) * 100 : 0).toFixed(1) + '%');
+  }
+
+  // 一首放不出来（文件坏了、格式这个浏览器不认）就跳下一首，整轮都不行才安静下来。
+  // error 事件和 play() 的失败可能都报一遍，所以只认「现在正放的就是它」那一次；
+  // 换歌时上一首的 play() 会以 AbortError 收场，也一并挡在这儿
+  function bgmFail(name) {
+    if (!name || name !== bgmNow) return;
+    bgmNow = '';
+    if (++bgmFails > bgmTracks.length) { bgmDead = true; return bgmLabel(); }
+    bgmNext();
+  }
+
+  let bgmLoading = false;
+  async function bgmLoad() {
+    if (bgmLoading) return;      // 进门时拿一次，TA 上线时可能又要一次，别打架
+    bgmLoading = true;
+    try {
+      const r = await fetch('/music/list?key=' + encodeURIComponent(myKey));
+      bgmTracks = (await r.json()).tracks || [];
+    } catch (e) { bgmTracks = []; }
+    bgmLoading = false;
+    bgmBag = [];
+    if (bgmWant && !bgmNow) bgmNext(); else bgmLabel();
+  }
+
+  // 洗牌抓阄：一轮里每首都放过一次才重新洗，比每次纯随机少些「刚放完又来」
+  function bgmPick() {
+    if (!bgmTracks.length) return '';
+    if (!bgmBag.length) {
+      bgmBag = bgmTracks.slice();
+      for (let i = bgmBag.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        const t = bgmBag[i]; bgmBag[i] = bgmBag[j]; bgmBag[j] = t;
+      }
+      if (bgmBag.length > 1 && bgmBag[0] === bgmNow) bgmBag.push(bgmBag.shift());
+    }
+    return bgmBag.shift();
+  }
+
+  function bgmNext() {
+    if (!bgmWant) return;
+    const name = bgmPick();
+    if (!name) { bgmNow = ''; return bgmLabel(); }
+    bgmNow = name;
+    const a = bgmAudio();
+    a.src = '/music/file?key=' + encodeURIComponent(myKey) + '&name=' + encodeURIComponent(name);
+    a.volume = 0;
+    a.play().then(() => {
+      bgmBlocked = false;
+      bgmFails = 0;
+      bgmTo(BGM_VOL);
+      bgmLabel();
+    }).catch(err => {
+      if (err && err.name === 'NotAllowedError') {
+        // 浏览器不让自动出声（这个页面还没被点过）。记一笔，下次点心跳时补上
+        bgmBlocked = true;
+        bgmNow = '';
+        bgmLabel();
+      } else {
+        bgmFail(name);      // 这首本身放不了，别赖到自动播放头上
+      }
+    });
+  }
+
+  function bgmTo(vol, done) {
+    clearInterval(bgmFade);
+    const a = bgmAudio();
+    const step = 50, d = (vol - a.volume) / (BGM_FADE / step);
+    bgmFade = setInterval(() => {
+      const v = a.volume + d;
+      if (d === 0 || (d > 0 && v >= vol) || (d < 0 && v <= vol)) {
+        clearInterval(bgmFade); bgmFade = null;
+        a.volume = vol;
+        if (done) done();
+        return;
+      }
+      a.volume = Math.min(1, Math.max(0, v));
+    }, step);
+  }
+
+  function bgmStop() {
+    bgmNow = '';
+    bgmLabel();
+    if (!bgmEl || bgmEl.paused) return;
+    bgmTo(0, () => bgmEl.pause());     // 别硬切，让它自己收住
+  }
+
+  // 想不想放，只由「开关 + 现在是不是两个人都在」决定，随时算随时对
+  function bgmSync() {
+    const want = bgmPref && !!roster.peer && !offline && !kicked && !stale;
+    if (want === bgmWant) return;
+    bgmWant = want;
+    if (!want) return bgmStop();
+    bgmFails = 0; bgmDead = false;   // 新的一次同在，坏文件重新给一轮机会
+    if (!bgmTracks.length) bgmLoad(); else bgmNext();
+  }
+
+  // 自动播放被拦下过的话，下一次点心跳时顺手再试一次
+  function bgmKick() { if (bgmBlocked && bgmWant && !bgmNow) bgmNext(); }
+
+  function bgmLabel() {
+    bgmBtn.textContent = bgmPref ? '♫' : '♫̸';
+    bgmBtn.style.color = !bgmPref ? 'var(--dim)' : (bgmNow ? 'var(--mine)' : 'var(--text)');
+    bgmBtn.title = !bgmPref ? '同在时的音乐：关'
+      : bgmNow ? '正在放：' + bgmNow
+      : bgmBlocked ? '点一下心跳，音乐就开始'
+      : !bgmTracks.length ? '服务器的 music 文件夹里还没有歌'
+      : bgmDead ? 'music 里的文件这个浏览器一个都放不出来'
+      : '两个人都在的时候放音乐';
+    nowRender();
+  }
+
+  function setBgm(on) {
+    bgmPref = on;
+    try { localStorage.setItem('heart-bgm', on ? '1' : '0'); } catch (e) {}
+    bgmSync();
+    bgmLabel();
   }
 
   /* ================= 粒子 ================= */
@@ -1059,6 +1257,7 @@
     if (e && e.button > 0) return;
     if (holding) return;
     holding = true;
+    bgmKick();                    // 这一下就是浏览器要的那次点击
     if (e && e.pointerId != null) {
       try { heart.setPointerCapture(e.pointerId); } catch (err) {}
     }
@@ -1177,6 +1376,7 @@
     if (!roster.peer) togetherFrom = 0;
 
     motesOn(!!roster.peer && !offline);   // 两个人都在，背景才冒小爱心
+    bgmSync();                            // 也是两个人都在才放音乐
     renderStatus();
   }
 
@@ -1280,6 +1480,7 @@
       if (d.version && d.version !== VERSION) {
         stale = true;
         running = false;
+        bgmSync();
         renderStatus();
         dump('版本不一致，需要刷新');
         return;
@@ -1323,9 +1524,10 @@
     } else if (ev === 'evicted') {
       // 版本对不上被请出去的，按「旧页面」提示，别说成「被顶掉了」——
       // 那句会让人以为是另一台设备抢了位置
-      if (d.why === 'stale') { stale = true; running = false; renderStatus(); return; }
+      if (d.why === 'stale') { stale = true; running = false; bgmSync(); renderStatus(); return; }
       kicked = true;
       running = false;
+      bgmSync();
       renderStatus();
     }
 
@@ -1360,6 +1562,7 @@
       dot.classList.remove('on');
       dot.classList.add('off');
       motesOn(false);            // 自己都断了，就别再装同在
+      bgmSync();
       renderStatus();
     }, 6000);
   }
@@ -1370,7 +1573,7 @@
     offline = false;
     dot.classList.remove('off');
     dot.classList.add('on');
-    if (was) { motesOn(!!roster.peer); renderStatus(); }   // 顶栏还停在「断线了，重连中」，得抹掉
+    if (was) { motesOn(!!roster.peer); bgmSync(); renderStatus(); }   // 顶栏还停在「断线了，重连中」，得抹掉
   }
 
   // 关页面时打一枪，让服务器立刻知道人走了，不用等超时
@@ -1392,6 +1595,9 @@
     if (!e.persisted || !myKey || kicked || stale) return;
     myId = '';
     running = false;
+    // 从缓存里恢复的页面，音乐多半已经被浏览器按停了。归零，等名单回来重开
+    bgmWant = false;
+    bgmStop();
     startPoll();
   });
 
@@ -1425,7 +1631,12 @@
   }
 
   popBtn.addEventListener('click', openFloat);
+
+  // 手机上的浏览器一个都没有这个 API，那颗按钮按下去只会弹「不支持」，
+  // 白占着顶栏本来就不够用的宽度 —— 不支持就不显示
+  if (!('documentPictureInPicture' in window)) popBtn.classList.add('gone');
   soundBtn.addEventListener('click', () => setSound(!soundOn));
+  bgmBtn.addEventListener('click', () => setBgm(!bgmPref));
 
   /* ================= 说明 ================= */
   function setHelp(open) {
@@ -1481,6 +1692,7 @@
     connect();
     histStart();
     whoStart();
+    bgmLoad();      // 先把曲目清单拿回来，等 TA 一上线就能立刻响
 
     // 第一次进来先把玩法讲一遍，之后不再自动弹
     try {
@@ -1503,7 +1715,8 @@
     if (n) nameIn.value = n;
     if (k) keyIn.value = k;
     setSound(localStorage.getItem('heart-sound') !== '0');
-  } catch (e) { setSound(true); }
+    setBgm(localStorage.getItem('heart-bgm') !== '0');
+  } catch (e) { setSound(true); setBgm(true); }
   (nameIn.value ? keyIn : nameIn).focus();
 })();
 </script>

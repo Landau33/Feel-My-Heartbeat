@@ -20,6 +20,7 @@ const PORT = process.env.PORT || 8787;
 const HTML_FILE = path.join(__dirname, 'index.html');
 const DATA_FILE = path.join(__dirname, 'hearts.json');
 const HISTORY_DIR = path.join(__dirname, 'history');
+const MUSIC_DIR = path.join(__dirname, 'music');
 
 const ROOM_KEY = process.env.ROOM_KEY || 'change-me';
 
@@ -105,6 +106,63 @@ function historyRead(date) {
     .map(l => { try { return JSON.parse(l); } catch (e) { return null; } })
     .filter(Boolean)
     .map(x => ({ t: x.t, time: x.t ? human(x.t) : '', name: x.name, text: x.text }));
+}
+
+// ---------- 音乐 ----------
+// ./music 里放什么就播什么。曲名不写进代码也不落盘，加一首歌就是往文件夹里丢个文件。
+const MUSIC_TYPES = {
+  '.mp3': 'audio/mpeg', '.m4a': 'audio/mp4', '.aac': 'audio/aac',
+  '.ogg': 'audio/ogg', '.oga': 'audio/ogg', '.opus': 'audio/ogg',
+  '.wav': 'audio/wav', '.flac': 'audio/flac', '.webm': 'audio/webm',
+};
+
+function musicList() {
+  try {
+    return fs.readdirSync(MUSIC_DIR)
+      .filter(f => f[0] !== '.' && MUSIC_TYPES[path.extname(f).toLowerCase()])
+      .sort();
+  } catch (e) { return []; }        // 文件夹还没建就是还没有歌，不算错
+}
+
+// 音频得支持 Range：Safari 一上来就按分段要，整个文件囫囵吐回去它不放声。
+// 拖进度条也走这里。
+function sendMusic(req, res, file) {
+  fs.stat(file, (err, st) => {
+    if (err || !st.isFile()) { res.writeHead(404); return res.end(); }
+
+    const head = {
+      'Content-Type': MUSIC_TYPES[path.extname(file).toLowerCase()] || 'application/octet-stream',
+      'Accept-Ranges': 'bytes',
+      'Cache-Control': 'private, max-age=3600',
+    };
+
+    let start = 0, end = st.size - 1;
+    const m = /^bytes=(\d*)-(\d*)$/.exec(req.headers.range || '');
+    if (m && (m[1] || m[2])) {
+      if (m[1]) {
+        start = parseInt(m[1], 10);
+        if (m[2]) end = parseInt(m[2], 10);
+      } else {
+        start = st.size - parseInt(m[2], 10);   // bytes=-500，要的是最后 500 字节
+      }
+      start = Math.max(0, start);
+      end = Math.min(end, st.size - 1);
+      if (start > end) {
+        res.writeHead(416, { 'Content-Range': 'bytes */' + st.size });
+        return res.end();
+      }
+      head['Content-Range'] = 'bytes ' + start + '-' + end + '/' + st.size;
+    }
+    head['Content-Length'] = end - start + 1;
+
+    res.writeHead(head['Content-Range'] ? 206 : 200, head);
+    if (req.method === 'HEAD') return res.end();
+
+    const stream = fs.createReadStream(file, { start, end });
+    stream.on('error', () => res.destroy());
+    res.on('close', () => stream.destroy());   // 换歌、关页面时别让它接着读
+    stream.pipe(res);
+  });
 }
 
 // ---------- 在线连接 ----------
@@ -366,7 +424,24 @@ const server = http.createServer(async (req, res) => {
       攒着的心跳: store.stash.hearts,
       攒着的纸条: store.stash.notes.length,
       聊天记录天数: historyDates().length,
+      曲目数: musicList().length,
     }, null, 2));
+  }
+
+  // 曲目清单
+  if (url.pathname === '/music/list') {
+    if (!keyOk(url.searchParams.get('key'))) { res.writeHead(401); return res.end(); }
+    res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
+    return res.end(JSON.stringify({ tracks: musicList() }));
+  }
+
+  // 放一首。<audio> 加不了请求头，口令只能跟在网址上
+  if (url.pathname === '/music/file' && (req.method === 'GET' || req.method === 'HEAD')) {
+    if (!keyOk(url.searchParams.get('key'))) { res.writeHead(401); return res.end(); }
+    const name = url.searchParams.get('name') || '';
+    // 拿清单当白名单，../ 之类的路径穿越一并挡掉
+    if (!musicList().includes(name)) { res.writeHead(404); return res.end(); }
+    return sendMusic(req, res, path.join(MUSIC_DIR, name));
   }
 
   // 聊天记录。不带 date 给日期清单，带 date 给那天的全部纸条
@@ -504,6 +579,8 @@ server.listen(PORT, '0.0.0.0', () => {
   lan.forEach(ip => console.log('  同一网络：  http://' + ip + ':' + PORT));
   console.log('  ─────────────────────────────');
   console.log('  累计心跳：' + store.total + ' 次    同频：' + store.syncs + ' 次');
+  const tracks = musicList().length;
+  console.log('  同在时的音乐：' + (tracks ? tracks + ' 首' : '还没有，往 music/ 里放几个音频文件'));
   const vwarn = checkFrontendVersion();
   if (vwarn) { console.log(''); console.log(vwarn); }
   if (ROOM_KEY === 'change-me') {

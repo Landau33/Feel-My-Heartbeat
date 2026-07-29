@@ -12,3 +12,7 @@ node_modules/
 # 运行时数据（含纸条内容，不进仓库）
 hearts.json
 history/
+
+# 音乐是自己的，文件也大，只留说明
+music/*
+!music/README.md
