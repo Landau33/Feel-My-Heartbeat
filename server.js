@@ -23,10 +23,10 @@ const HISTORY_DIR = path.join(__dirname, 'history');
 
 const ROOM_KEY = process.env.ROOM_KEY || 'change-me';
 
-const MAX_CLIENTS = 8;
+const MAX_CLIENTS = 4;
 const SYNC_WINDOW = 3000;      // 两人在这个间隔内先后点击，算「同频」
 const MAX_NOTE = 60;
-const MAX_STASH_NOTES = 20;
+const MAX_STASH_NOTES = 50;
 const HOLD_MS = 15000;         // 一个 poll 请求最多挂这么久没消息就空手放回
 const CLIENT_TIMEOUT = 60000;  // 这么久没来取消息，就当这个人已经离开
 const MSG_CAP = 500;           // 每个连接每 10 秒最多发这么多条消息

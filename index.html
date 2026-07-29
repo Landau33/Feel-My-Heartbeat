@@ -80,6 +80,29 @@
   }
   @keyframes drift { to { transform: translate3d(3%, -3%, 0) scale(1.08); } }
 
+  /* 两个人都在的时候，整个背景里缓缓往上冒的小爱心 */
+  .motes { position: absolute; inset: 0; z-index: 0; overflow: hidden; pointer-events: none; }
+  .mote {
+    position: absolute; bottom: -8%;
+    width: var(--size); height: var(--size);
+    animation: moteRise var(--dur) linear forwards;
+  }
+  .mote i {                                   /* 外层管上升，内层管左右摇，互不打架 */
+    display: block; width: 100%; height: 100%;
+    animation: moteSway var(--sway) ease-in-out infinite alternate;
+  }
+  .mote svg { width: 100%; height: 100%; display: block; }
+  @keyframes moteRise {
+    0%   { transform: translateY(0);         opacity: 0; }
+    14%  { opacity: var(--peak); }
+    74%  { opacity: var(--peak); }
+    100% { transform: translateY(var(--ty)); opacity: 0; }
+  }
+  @keyframes moteSway {
+    from { transform: translateX(calc(var(--sx) * -1)) rotate(calc(var(--rot) * -1)); }
+    to   { transform: translateX(var(--sx))            rotate(var(--rot)); }
+  }
+
   /* ---------- 大爱心 ---------- */
   .heart-btn {
     position: relative; z-index: 2;
@@ -444,6 +467,7 @@
 
 <div id="stage">
   <div class="aura"></div>
+  <div class="motes" id="motes"></div>
 
   <button class="heart-btn" id="heart" aria-label="发送心跳，按住可以连发">
     <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -565,7 +589,7 @@
   const $ = id => document.getElementById(id);
   const gate = $('gate'), nameIn = $('nameInput'), keyIn = $('keyInput'),
         errEl = $('err'), enterBtn = $('enterBtn'),
-        stage = $('stage'), heart = $('heart'),
+        stage = $('stage'), heart = $('heart'), motesBox = $('motes'),
         dot = $('dot'), rosterFull = $('rosterFull'), rosterMini = $('rosterMini'),
         soundBtn = $('soundBtn'), popBtn = $('popBtn'),
         helpBox = $('help'), helpBtn = $('helpBtn'), helpClose = $('helpClose'),
@@ -605,7 +629,7 @@
 
   /* ================= 调试 ================= */
   // 网址后面加 ?debug，左下角会显示服务器推来的原始名单
-  const VERSION = '1.2.6';
+  const VERSION = '1.2.7';
   const DEBUG = new URLSearchParams(location.search).has('debug');
   const dbgEl = $('dbg');
 
@@ -827,6 +851,53 @@
     el.style.color = color;
     stage.appendChild(el);
     el.addEventListener('animationend', () => el.remove());
+  }
+
+  /* ---- 背景小爱心：只在两个人都在的时候冒 ---- */
+  const MOTE_EVERY = 500;   // 平均隔多久冒一颗，毫秒
+  const MOTE_RISE  = 15;     // 从底下飘到顶上要多少秒，越大越慢
+  let moteTimer = null;
+
+  function mote() {
+    const d = doc();
+    const h = stage.clientHeight || 480;
+    const size = 9 + Math.random() * 13;
+
+    const el = d.createElement('span');
+    el.className = 'mote';
+    el.style.left = (3 + Math.random() * 94) + '%';
+    el.style.setProperty('--size', size.toFixed(1) + 'px');
+    el.style.setProperty('--ty', '-' + (h + size * 2 + 40).toFixed(0) + 'px');
+    el.style.setProperty('--dur', (MOTE_RISE * (0.8 + Math.random() * 0.6)).toFixed(1) + 's');
+    el.style.setProperty('--sway', (2.6 + Math.random() * 2.6).toFixed(1) + 's');
+    el.style.setProperty('--sx', (8 + Math.random() * 16).toFixed(0) + 'px');
+    el.style.setProperty('--rot', (5 + Math.random() * 12).toFixed(0) + 'deg');
+    el.style.setProperty('--peak', (0.16 + Math.random() * 0.16).toFixed(2));
+
+    const inner = d.createElement('i');
+    const svg = d.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    svg.setAttribute('viewBox', '0 0 24 24');
+    const p = d.createElementNS('http://www.w3.org/2000/svg', 'path');
+    p.setAttribute('d', HEART);
+    p.setAttribute('fill', Math.random() < 0.5 ? C.mine : C.yours);   // 你俩的颜色各一半
+    svg.appendChild(p);
+    inner.appendChild(svg);
+    el.appendChild(inner);
+
+    el.addEventListener('animationend', e => {
+      if (e.animationName === 'moteRise') el.remove();
+    });
+    motesBox.appendChild(el);
+  }
+
+  function motesOn(on) {
+    if (on && !moteTimer && !reduced) {
+      moteTimer = setInterval(() => { if (!doc().hidden) mote(); }, MOTE_EVERY);
+      mote();
+    } else if (!on && moteTimer) {
+      clearInterval(moteTimer);
+      moteTimer = null;             // 已经在飘的那几颗让它们自己飘完，别硬切
+    }
   }
 
   // 重新播放动画要先把类摘掉、强制回流，否则连点第二下不会有反应
@@ -1105,6 +1176,7 @@
     if (roster.peer && !togetherFrom) togetherFrom = Date.now();
     if (!roster.peer) togetherFrom = 0;
 
+    motesOn(!!roster.peer && !offline);   // 两个人都在，背景才冒小爱心
     renderStatus();
   }
 
@@ -1287,6 +1359,7 @@
       offline = true;
       dot.classList.remove('on');
       dot.classList.add('off');
+      motesOn(false);            // 自己都断了，就别再装同在
       renderStatus();
     }, 6000);
   }
@@ -1297,7 +1370,7 @@
     offline = false;
     dot.classList.remove('off');
     dot.classList.add('on');
-    if (was) renderStatus();   // 顶栏还停在「断线了，重连中」，得抹掉
+    if (was) { motesOn(!!roster.peer); renderStatus(); }   // 顶栏还停在「断线了，重连中」，得抹掉
   }
 
   // 关页面时打一枪，让服务器立刻知道人走了，不用等超时
