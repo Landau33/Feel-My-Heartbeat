@@ -1,6 +1,6 @@
 {
   "name": "feel-my-heartbeat",
-  "version": "1.2.4",
+  "version": "1.2.5",
   "description": "Feel My Heartbeat · 只有两个人的爱心同步",
   "main": "server.js",
   "scripts": {

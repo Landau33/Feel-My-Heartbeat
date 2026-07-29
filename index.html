@@ -11,7 +11,7 @@
     --ink-soft: #171430;
     --haze:     #2a2450;
     --mine:     #ff5f8d;
-    --yours:    #5ee0d0;
+    --yours:    #5ec8ff;
     --gold:     #ffd76e;
     --text:     #e8e4ff;
     --dim:      #7d76a8;
@@ -74,7 +74,7 @@
     position: absolute; inset: -25%; pointer-events: none;
     background:
       radial-gradient(38% 30% at 30% 22%, rgba(255,95,141,.17), transparent 70%),
-      radial-gradient(34% 28% at 72% 76%, rgba(94,224,208,.14), transparent 70%);
+      radial-gradient(34% 28% at 72% 76%, rgba(94,200,255,.14), transparent 70%);
     filter: blur(20px);
     animation: drift 26s ease-in-out infinite alternate;
   }
@@ -118,7 +118,7 @@
     transition: fill .45s ease, filter .45s ease;
   }
   #stage.remote .heart-btn .core {
-    fill: var(--yours); filter: drop-shadow(0 0 34px rgba(94,224,208,.6));
+    fill: var(--yours); filter: drop-shadow(0 0 34px rgba(94,200,255,.6));
   }
   #stage.synced .heart-btn .core {
     fill: var(--gold); filter: drop-shadow(0 0 46px rgba(255,215,110,.75));
@@ -255,7 +255,7 @@
   .stash p { margin: 0; font-size: 13px; color: var(--dim); line-height: 1.8; }
   .stash button {
     justify-self: center; padding: 11px 24px; border: 0; border-radius: 12px;
-    background: var(--yours); color: #05201d;
+    background: var(--yours); color: #04192b;
     font-size: 14px; font-weight: 600; font-family: var(--sans); cursor: pointer;
   }
 
@@ -351,7 +351,7 @@
     border-radius: 50%; transform: rotate(45deg);
   }
   .sw.mine  { background: var(--mine);  box-shadow: 0 0 8px rgba(255,95,141,.6); }
-  .sw.yours { background: var(--yours); box-shadow: 0 0 8px rgba(94,224,208,.6); }
+  .sw.yours { background: var(--yours); box-shadow: 0 0 8px rgba(94,200,255,.6); }
   .sw.gold  { background: var(--gold);  box-shadow: 0 0 8px rgba(255,215,110,.7); }
   .sw.dim   { background: var(--haze); }
 
@@ -373,7 +373,7 @@
   }
   .compact #stage.remote .aura {
     background:
-      radial-gradient(circle at 50% 46%, rgba(94,224,208,.30), transparent 58%),
+      radial-gradient(circle at 50% 46%, rgba(94,200,255,.30), transparent 58%),
       radial-gradient(circle at 50% 46%, rgba(60,140,180,.20), transparent 78%);
   }
   .compact #stage.synced .aura {
@@ -576,7 +576,7 @@
         stashText = $('stashText'), stashBtn = $('stashBtn');
 
   const HEART = 'M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z';
-  const C = { mine: '#ff5f8d', yours: '#5ee0d0', gold: '#ffd76e' };
+  const C = { mine: '#ff5f8d', yours: '#5ec8ff', gold: '#ffd76e' };
   // 前三个悬浮窗里也留着；QUICK_MORE 只在大窗口出现，
   // 免得把只有 200px 宽的悬浮窗撑开
   const QUICK = ['想你了', '在干嘛', '抱抱'];
@@ -605,7 +605,7 @@
 
   /* ================= 调试 ================= */
   // 网址后面加 ?debug，左下角会显示服务器推来的原始名单
-  const VERSION = '1.2.4';
+  const VERSION = '1.2.5';
   const DEBUG = new URLSearchParams(location.search).has('debug');
   const dbgEl = $('dbg');
 
