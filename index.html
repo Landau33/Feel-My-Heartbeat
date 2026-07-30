@@ -857,6 +857,11 @@
 
   function setSound(on) {
     soundOn = on;
+    // 关的时候把整条音频链掐掉，不只是拦住下一声。连发的时候提示音是提前排好队的，
+    // 最长还有 0.9 秒的尾巴 —— 光拦新的，听着就像「关了还在响」
+    if (ac) {
+      try { on ? ac.resume() : ac.suspend(); } catch (e) {}
+    }
     soundBtn.textContent = on ? '♪' : '♪̸';
     soundBtn.style.color = on ? 'var(--text)' : 'var(--dim)';
     try { localStorage.setItem('heart-sound', on ? '1' : '0'); } catch (e) {}
@@ -948,6 +953,9 @@
     a.src = '/music/file?key=' + encodeURIComponent(myKey) + '&name=' + encodeURIComponent(name);
     a.volume = 0;
     a.play().then(() => {
+      // play() 是等一会儿才回话的。这一会儿里开关可能已经被关掉了（bgmStop 正在淡出，
+      // 收尾那步是 pause），要是这儿照旧把音量淡上来，就把人家的淡出顶掉了 —— 音乐关不掉
+      if (!bgmWant || bgmNow !== name) return;
       bgmBlocked = false;
       bgmFails = 0;
       bgmTo(BGM_VOL);
@@ -964,19 +972,40 @@
     });
   }
 
+  // iPhone 上（Safari、以及 iOS 上所有别的浏览器，内核都是它）脚本改不动音量：
+  // 赋值没反应，读回来永远是 1 —— 音量只归实体音量键管。问一句改不改得动，
+  // 改不动就别装作在淡入淡出
+  let bgmVolOk = null;
+  function bgmCanVol(a) {
+    if (bgmVolOk === null) {
+      const keep = a.volume;
+      try { a.volume = 0.5; } catch (e) {}
+      bgmVolOk = Math.abs(a.volume - 0.5) < 0.01;
+      try { a.volume = keep; } catch (e) {}
+    }
+    return bgmVolOk;
+  }
+
+  // 淡到 vol，到了叫一声 done。
+  // 收尾按「走了几步」算，不看音量读回来是多少 —— 以前是拿读回来的音量跟目标比，
+  // 在 iPhone 上永远读到 1，循环原地打转，done 一辈子等不到，
+  // bgmStop 里那句 pause() 就永远执行不到，音乐怎么点都关不掉
   function bgmTo(vol, done) {
-    clearInterval(bgmFade);
+    clearInterval(bgmFade); bgmFade = null;
     const a = bgmAudio();
-    const step = 50, d = (vol - a.volume) / (BGM_FADE / step);
+    if (!bgmCanVol(a)) { if (done) done(); return; }   // 音量改不动，就没有淡这回事
+
+    const step = 50, steps = Math.max(1, Math.round(BGM_FADE / step));
+    const from = a.volume;
+    let i = 0;
     bgmFade = setInterval(() => {
-      const v = a.volume + d;
-      if (d === 0 || (d > 0 && v >= vol) || (d < 0 && v <= vol)) {
+      i++;
+      a.volume = Math.min(1, Math.max(0, from + (vol - from) * (i / steps)));
+      if (i >= steps) {
         clearInterval(bgmFade); bgmFade = null;
         a.volume = vol;
         if (done) done();
-        return;
       }
-      a.volume = Math.min(1, Math.max(0, v));
     }, step);
   }
 
@@ -984,7 +1013,7 @@
     bgmNow = '';
     bgmLabel();
     if (!bgmEl || bgmEl.paused) return;
-    bgmTo(0, () => bgmEl.pause());     // 别硬切，让它自己收住
+    bgmTo(0, () => bgmEl.pause());     // 淡得动就别硬切，让它自己收住
   }
 
   // 想不想放，只由「开关 + 现在是不是两个人都在」决定，随时算随时对
