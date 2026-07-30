@@ -16,6 +16,25 @@
 
 ---
 
+## [1.3.3] - 2026-07-30
+
+### 变更
+- **调试台改成一个单独的口令：`.env` 里的 `DEBUG_KEY`。** 房间口令在那一页不作数了 ——
+  调试台看得见 IP、UA、连接明细和全部历史纸条，知道 `ROOM_KEY` 的人（包括对方）
+  不该顺手就能看这些。`/state`、`/history`、`/who` 三个接口一并只认 `DEBUG_KEY`；
+  房间那一路（`/check`、`/join`、`/poll`、`/send`、`/leave`、`/music/*`、`/reset`、`/bot`）
+  照旧认 `ROOM_KEY`。`/check` 多一个可选的 `for=debug`，带上就改成验调试口令
+- **没设 `DEBUG_KEY` 就等于把调试台关掉**（那三个接口一律 401，口令框谁也开不了），
+  启动日志里会提醒一句；`DEBUG_KEY` 和 `ROOM_KEY` 设成一样也警告一句 ——
+  验口令的 `sameKey()` 里 `if (!want) return false`，空口令不给放行，
+  不然 `timingSafeEqual` 对上两个空 Buffer 就成了"不带 key 也能进"
+- `restart_server.sh` 跟着从 `.env` 里往下传 `DEBUG_KEY`
+- **调试台那一页的界面全改成英文了**（`Control Panel`、`Online Connections`、`Counters`……），
+  标题、表头、计数、参数、提示语、报错一并翻完，`lang` 也从 `zh-CN` 改成 `en`。
+  只有这一页；主页面还是中文，代码注释也都没动
+
+---
+
 ## [1.3.2] - 2026-07-30
 
 ### 变更

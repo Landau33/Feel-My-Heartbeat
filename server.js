@@ -13,7 +13,7 @@ const crypto = require('crypto');
 
 // 版本号以 package.json 为准，代码里不再各写一份。
 // 升版本只改 package.json（或用 npm version）
-let VERSION = '1.3.2';
+let VERSION = '1.3.3';
 try { VERSION = require('./package.json').version || VERSION; } catch (e) {}
 
 const PORT = process.env.PORT || 8787;
@@ -24,6 +24,11 @@ const HISTORY_DIR = path.join(__dirname, 'history');
 const MUSIC_DIR = path.join(__dirname, 'music');
 
 const ROOM_KEY = process.env.ROOM_KEY || 'change-me';
+
+// 调试台单独一个口令，跟房间口令分开。它那一页看得见 IP、UA、连接明细和
+// 历史纸条，知道房间口令不等于能看这些。没设 DEBUG_KEY 就等于把调试台关掉：
+// /state、/history、/who 一律 401，那一页的口令框谁也开不了。
+const DEBUG_KEY = process.env.DEBUG_KEY || '';
 
 const MAX_CLIENTS = 4;
 const SYNC_WINDOW = 3000;      // 两人在这个间隔内先后点击，算「同频」
@@ -293,11 +298,18 @@ setInterval(() => {
   }
 }, 10000);
 
-function keyOk(given) {
+function sameKey(given, want) {
+  if (!want) return false;                 // 没配口令，就谁也别放进来
   const a = Buffer.from(String(given || ''));
-  const b = Buffer.from(ROOM_KEY);
+  const b = Buffer.from(want);
   return a.length === b.length && crypto.timingSafeEqual(a, b);
 }
+
+// 房间口令：主页面和一切跟房间有关的接口
+function keyOk(given) { return sameKey(given, ROOM_KEY); }
+
+// 调试口令：只有调试台那几个接口认它，房间口令在这儿不作数
+function debugKeyOk(given) { return sameKey(given, DEBUG_KEY); }
 
 function readBody(req, limit) {
   return new Promise(resolve => {
@@ -516,16 +528,20 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  // 验口令。?for=debug 验的是调试口令，其余（主页面登录）验房间口令
   if (url.pathname === '/check') {
-    const ok = keyOk(url.searchParams.get('key'));
+    const forDebug = url.searchParams.get('for') === 'debug';
+    const ok = forDebug ? debugKeyOk(url.searchParams.get('key'))
+                        : keyOk(url.searchParams.get('key'));
     if (!ok) { res.writeHead(401, { 'Cache-Control': 'no-store' }); return res.end(); }
     res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
     return res.end(JSON.stringify({ ok: true, version: VERSION }));
   }
 
-  //   curl "http://localhost:8787/who?key=你的口令"
+  // 调试台的 curl 版，认调试口令
+  //   curl "http://localhost:8787/who?key=你的调试口令"
   if (url.pathname === '/who') {
-    if (!keyOk(url.searchParams.get('key'))) { res.writeHead(401); return res.end(); }
+    if (!debugKeyOk(url.searchParams.get('key'))) { res.writeHead(401); return res.end(); }
     const room = roomOf(url.searchParams.get('room'));
     res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
     return res.end(JSON.stringify({
@@ -552,10 +568,10 @@ const server = http.createServer(async (req, res) => {
     }, null, 2));
   }
 
-  // 服务端此刻的全貌，给 /debug 用。纯读，调它不会改变任何东西
-  //   curl "http://localhost:8787/state?key=你的口令"
+  // 服务端此刻的全貌，给 /debug 用，认调试口令。纯读，调它不会改变任何东西
+  //   curl "http://localhost:8787/state?key=你的调试口令"
   if (url.pathname === '/state') {
-    if (!keyOk(url.searchParams.get('key'))) { res.writeHead(401); return res.end(); }
+    if (!debugKeyOk(url.searchParams.get('key'))) { res.writeHead(401); return res.end(); }
     const room = roomOf(url.searchParams.get('room'));
     const store = room.store;
     const now = Date.now();
@@ -617,11 +633,11 @@ const server = http.createServer(async (req, res) => {
     return sendMusic(req, res, path.join(MUSIC_DIR, name));
   }
 
-  // 聊天记录。不带 date 给日期清单，带 date 给那天的全部纸条
-  //   curl "http://localhost:8787/history?key=你的口令"
-  //   curl "http://localhost:8787/history?key=你的口令&date=20260727"
+  // 聊天记录，给 /debug 用，认调试口令。不带 date 给日期清单，带 date 给那天的全部纸条
+  //   curl "http://localhost:8787/history?key=你的调试口令"
+  //   curl "http://localhost:8787/history?key=你的调试口令&date=20260727"
   if (url.pathname === '/history') {
-    if (!keyOk(url.searchParams.get('key'))) { res.writeHead(401); return res.end(); }
+    if (!debugKeyOk(url.searchParams.get('key'))) { res.writeHead(401); return res.end(); }
     const dates = historyDates();
     const date = url.searchParams.get('date');
     let body;
@@ -775,6 +791,13 @@ server.listen(PORT, '0.0.0.0', () => {
   if (ROOM_KEY === 'change-me') {
     console.log('');
     console.log('  ⚠ 还在用默认口令：ROOM_KEY=你们俩的暗号 node server.js');
+  }
+  if (!DEBUG_KEY) {
+    console.log('');
+    console.log('  ⚠ 没设 DEBUG_KEY，/debug 调试台进不去（.env 里加一行 DEBUG_KEY=…）');
+  } else if (DEBUG_KEY === ROOM_KEY) {
+    console.log('');
+    console.log('  ⚠ DEBUG_KEY 和 ROOM_KEY 一样，调试台等于没单独上锁');
   }
   console.log('');
 });

@@ -21,8 +21,17 @@
 | **服务器** | Node 网站本体，存心跳、发纸条 | `node server.js` | 本机 `8787` |
 | **Cloudflare 隧道** | 把本机 8787 端口暴露到公网，给你一个 `https://xxx.trycloudflare.com` 网址 | `cloudflared tunnel --url http://localhost:8787` | — |
 
-房间口令（ROOM_KEY）：写在项目根目录的 `.env` 里（不进仓库），对方打开网址后要输入它才能进房间。
-下面命令里出现的 `123456` 都是占位的示例口令，换成你自己的。
+口令有两个，都写在项目根目录的 `.env` 里（不进仓库）：
+
+| 变量 | 谁用 | 不设会怎样 |
+|------|------|-----------|
+| `ROOM_KEY` | 主页面进房间的口令，发给对方的就是这个 | 退回默认的 `change-me`，启动时会警告 |
+| `DEBUG_KEY` | `/debug` 调试台单独的口令，**只有你自己知道** | 调试台直接关掉（`/state`、`/history`、`/who` 一律 401） |
+
+调试台看得见 IP、UA、连接明细和全部历史纸条，所以它不认房间口令 —— 知道 `ROOM_KEY`
+的人（包括对方）进不去那一页。两个口令别设成一样的，设一样启动时也会警告。
+
+下面命令里出现的 `123456`、`654321` 都是占位的示例口令，换成你自己的。
 
 > ⚠️ 现在用的是**临时隧道（quick tunnel）**。它最大的特点：**每次重启 cloudflared，网址都会变一个新的。** 重启完记得把新网址发给对方。
 >
@@ -40,7 +49,7 @@ pkill -f "node server.js"
 
 # 2) 进目录，带着口令重新启动
 cd <项目目录>
-ROOM_KEY=123456 PORT=8787 node server.js
+ROOM_KEY=123456 DEBUG_KEY=654321 PORT=8787 node server.js
 ```
 
 启动成功会看到「Feel My Heartbeat」和版本号，以及累计心跳、同频次数，日志里也会打印本机地址和局域网地址。
@@ -52,7 +61,7 @@ ROOM_KEY=123456 PORT=8787 node server.js
 
 ```bash
 cd <项目目录>
-ROOM_KEY=123456 PORT=8787 nohup node server.js > server.log 2>&1 &
+ROOM_KEY=123456 DEBUG_KEY=654321 PORT=8787 nohup node server.js > server.log 2>&1 &
 ```
 
 之后看日志：`tail -f server.log`（在项目目录下）
@@ -131,7 +140,7 @@ curl -s localhost:8787 | head -1
 cd <项目目录>
 pkill -f "node server.js"; pkill -f "cloudflared tunnel"
 sleep 1
-ROOM_KEY=123456 PORT=8787 nohup node server.js > server.log 2>&1 &
+ROOM_KEY=123456 DEBUG_KEY=654321 PORT=8787 nohup node server.js > server.log 2>&1 &
 sleep 1
 nohup cloudflared tunnel --url http://localhost:8787 > tunnel.log 2>&1 &
 sleep 6
@@ -211,7 +220,7 @@ git tag -n1          # 看所有已发布版本
 **看服务器眼里现在有谁**
 
 ```bash
-curl "http://localhost:8787/who?key=你的口令"
+curl "http://localhost:8787/who?key=你的调试口令"
 ```
 
 返回连接数、每个人的名字、连了多久、多久没动静、有没有挂着的请求，
@@ -256,8 +265,10 @@ curl -X POST "http://localhost:8787/bot?key=你的口令&room=test&on=1"
 
 **调试台**
 
-浏览器打开 `http://localhost:8787/debug`，手输一遍口令。这一页每次都要输：
+浏览器打开 `http://localhost:8787/debug`，手输一遍**调试口令**（`.env` 里的 `DEBUG_KEY`，
+跟房间口令是两个不同的口令，房间口令在这一页不作数）。这一页每次都要输：
 主页面登录过也不算，网址上挂 `?key=` 也不认（老书签带过来的，进页面当场从地址栏抹掉）。
+`DEBUG_KEY` 没设的话这一页谁也进不去，服务端启动时会提醒你一句。
 
 它跟主页面是**完全分开的两页**，而且只看不动：不进房间、不算在线人数、
 不会拿走攒着的心跳和纸条，页面上也没有任何能改到房间的按钮 —— 拿它盯着，
@@ -280,7 +291,7 @@ curl -X POST "http://localhost:8787/bot?key=你的口令&room=test&on=1"
 顶栏那颗「看：真房间／test 房间」切的是看哪个房间 —— 在 `/test` 里点心跳，
 得切到 test 房间才看得见。
 
-命令行要同一份数据：`curl "http://localhost:8787/state?key=你的口令"`，
+命令行要同一份数据：`curl "http://localhost:8787/state?key=你的调试口令"`，
 加 `&room=test` 看测试房间。`/who`、`/reset` 也认这个参数。
 
 **常见情况**
@@ -289,6 +300,7 @@ curl -X POST "http://localhost:8787/bot?key=你的口令&room=test&on=1"
 |---|---|---|
 | 对方说网址打不开 | 隧道网址变了（重启过），或隧道没跑 | 按「让朋友连上」重开，发新网址 |
 | 能打开但进不去房间 / 提示口令不对 | 口令要一字不差 | 确认是 `123456` |
+| `/debug` 输了口令进不去 | 那一页认的是 `DEBUG_KEY`，房间口令在这儿不作数；也可能压根没设 | 看启动日志有没有「没设 DEBUG_KEY」的警告，`.env` 里补一行再重启 |
 | 能打开但没有实时同步、心跳不动 | 服务器（node）没跑 | 按「跑起来」重启 |
 | 登录页提示版本不一致 | 只换了一个文件，或者没重启 node | 三处版本对齐后重启 node |
 | 两个人互相看不见 | 名字填成一样了 —— 按名字认人，同名会被当成同一个人 | 换个不一样的名字 |
@@ -316,6 +328,11 @@ HTTP 长轮询。四个接口：
 `/who` 看在线情况、`/reset` 清统计、`/history` 取聊天记录、
 `/music/list` 拿曲目清单、`/music/file` 放歌（支持 Range，能拖进度、Safari 也认）、
 `/bot` 往测试房间叫来／送走那个假 TA。
+
+**这些接口认哪个口令，分得很清：** `/state`、`/history`、`/who` 是调试台那一路，
+只认 `DEBUG_KEY`；其余（`/check`、`/join`、`/poll`、`/send`、`/leave`、
+`/music/*`、`/reset`、`/bot`）认 `ROOM_KEY`。`/check` 多一个可选的 `for=debug`，
+带上就改成验调试口令 —— 调试台那一页登录用的就是它。
 另外 `/debug` 是调试台那一页，`/test` 是测试房间那一页（送的就是 `index.html`）。
 
 之所以是长轮询而不是更时髦的方案：SSE 经 Cloudflare 隧道会被缓冲，消息一阵一阵地到；WebSocket 的 upgrade 请求隧道压根不转发，握手直接失败。长轮询每次都是完整的短请求，没有需要保持的流，任何代理都拦不住。
@@ -336,7 +353,7 @@ HTTP 长轮询。四个接口：
 
 ```bash
 # 服务器认出几首
-curl "http://localhost:8787/who?key=你的口令" | grep 曲目数
+curl "http://localhost:8787/who?key=你的调试口令" | grep 曲目数
 
 # 曲目清单
 curl "http://localhost:8787/music/list?key=你的口令"
@@ -392,10 +409,10 @@ history/20260727
 
 ```bash
 # 有哪几天的记录
-curl "http://localhost:8787/history?key=你的口令"
+curl "http://localhost:8787/history?key=你的调试口令"
 
 # 看某一天
-curl "http://localhost:8787/history?key=你的口令&date=20260727"
+curl "http://localhost:8787/history?key=你的调试口令&date=20260727"
 # {"t":1785123319008,"time":"260727 11:35:19","name":"yuang","text":"想你了"}
 ```
 

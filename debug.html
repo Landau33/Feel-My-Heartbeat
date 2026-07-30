@@ -1,10 +1,10 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="theme-color" content="#0d0b18">
-<title>调试台 · Feel My Heartbeat</title>
+<title>Control Panel · Feel My Heartbeat</title>
 <style>
   /* 跟主页面同一套颜色，但这一页是纯看的：没有心跳、没有音乐、不进房间 */
   :root {
@@ -118,50 +118,49 @@
 <body>
 
 <div class="gate" id="gate">
-  <h1>调试台</h1>
-  <p>只读。这一页不进房间，不算在线人数，也点不出心跳。</p>
-  <input id="keyInput" type="password" placeholder="口令" autocomplete="current-password">
+  <h1>Control Panel</h1>
+  <input id="keyInput" type="password" placeholder="Password" autocomplete="current-password">
   <div class="err" id="err"></div>
-  <button id="enterBtn">看</button>
+  <button id="enterBtn">Enter</button>
 </div>
 
 <div class="top" id="top" hidden>
-  <span class="name">调试台</span>
-  <span><span class="k">服务端</span> <span id="tVer">–</span></span>
-  <span><span class="k">房间</span> <span id="tRoom">–</span></span>
-  <span><span class="k">运行</span> <span id="tUp">–</span></span>
-  <span><span class="k">现在</span> <span id="tNow">–</span></span>
-  <span><span class="k">读一次</span> <span id="tRtt">–</span></span>
+  <span class="name">Control Panel</span>
+  <span><span class="k">Server</span> <span id="tVer">–</span></span>
+  <span><span class="k">Room</span> <span id="tRoom">–</span></span>
+  <span><span class="k">Running</span> <span id="tUp">–</span></span>
+  <span><span class="k">Time</span> <span id="tNow">–</span></span>
+  <span><span class="k">Delay</span> <span id="tRtt">–</span></span>
   <span class="spacer"></span>
   <span id="tState" class="dim">–</span>
-  <button id="roomBtn">看：真房间</button>
-  <button id="pauseBtn">暂停</button>
-  <button id="nowBtn">刷新</button>
+  <button id="roomBtn">Online Room</button>
+  <button id="pauseBtn">Pause</button>
+  <button id="nowBtn">Refresh</button>
 </div>
 
 <main id="body" hidden>
   <section>
-    <h2>在线连接 <b id="cN">–</b></h2>
+    <h2>Online Connections <b id="cN">–</b></h2>
     <div class="box" id="cBox"></div>
   </section>
 
   <section>
-    <h2>刚被顶掉的 <b id="eN">–</b></h2>
+    <h2>Recently Disconnected <b id="eN">–</b></h2>
     <div class="box" id="eBox"></div>
   </section>
 
   <section>
-    <h2>计数</h2>
+    <h2>Counters</h2>
     <div class="box"><dl id="sBox"></dl></div>
   </section>
 
   <section>
-    <h2>攒着没送出去的</h2>
+    <h2>Stashed, Not Yet Delivered</h2>
     <div class="box" id="stashBox"></div>
   </section>
 
   <section>
-    <h2>纸条记录</h2>
+    <h2>Note History</h2>
     <div class="box">
       <div class="picker">
         <select id="histDate"></select>
@@ -172,20 +171,20 @@
   </section>
 
   <section>
-    <h2>music 文件夹 <b id="mN">–</b></h2>
+    <h2>music Folder <b id="mN">–</b></h2>
     <div class="box" id="mBox"></div>
   </section>
 
   <section>
-    <h2>服务端参数</h2>
+    <h2>Server Config</h2>
     <div class="box"><dl id="kBox"></dl></div>
   </section>
 
   <section>
-    <h2>原始 /state</h2>
+    <h2>Raw /state</h2>
     <div class="box">
       <details>
-        <summary>展开看整包 JSON</summary>
+        <summary>Expand the full JSON</summary>
         <pre class="pre" id="raw"></pre>
       </details>
     </div>
@@ -193,7 +192,7 @@
 </main>
 
 <div class="foot" id="foot" hidden>
-  这一页只发 GET /state、/history、/check —— 看什么都不会改到房间里的东西。
+  This page only sends GET /state, /history, /check — nothing you do here can change the room.
 </div>
 
 <script>
@@ -215,10 +214,10 @@
     sec = Math.max(0, Math.round(sec));
     const d = Math.floor(sec / 86400), h = Math.floor(sec % 86400 / 3600);
     const m = Math.floor(sec % 3600 / 60), s = sec % 60;
-    if (d) return d + '天' + h + '时';
-    if (h) return h + '时' + m + '分';
-    if (m) return m + '分' + s + '秒';
-    return s + '秒';
+    if (d) return d + 'd ' + h + 'h';
+    if (h) return h + 'h ' + m + 'm';
+    if (m) return m + 'm ' + s + 's';
+    return s + 's';
   };
   const size = n => n < 1024 ? n + ' B'
     : n < 1024 * 1024 ? (n / 1024).toFixed(1) + ' KB'
@@ -230,18 +229,18 @@
     ua = String(ua || '');
     const dev = /iPhone/.test(ua) ? 'iPhone' : /iPad/.test(ua) ? 'iPad' :
                 /Android/.test(ua) ? 'Android' : /Macintosh/.test(ua) ? 'Mac' :
-                /Windows/.test(ua) ? 'Windows' : /Linux/.test(ua) ? 'Linux' : '不知什么设备';
+                /Windows/.test(ua) ? 'Windows' : /Linux/.test(ua) ? 'Linux' : 'Unknown device';
     const br = /Edg[A-Z]?\//.test(ua) ? 'Edge' :
                /CriOS|Chrome\//.test(ua) ? 'Chrome' :
                /FxiOS|Firefox/.test(ua) ? 'Firefox' :
-               /Safari\//.test(ua) ? 'Safari' : '不知什么浏览器';
+               /Safari\//.test(ua) ? 'Safari' : 'Unknown browser';
     return dev + ' ' + br;
   }
 
   // 表格和字典都逐个建节点，服务端来的字符串一律不拼进 HTML
   function table(box, cols, rows) {
     box.textContent = '';
-    if (!rows.length) { box.append(text('span', '（空）', 'dim')); return; }
+    if (!rows.length) { box.append(text('span', '(empty)', 'dim')); return; }
     const t = document.createElement('table');
     const hr = document.createElement('tr');
     for (const c of cols) hr.appendChild(text('th', c.h));
@@ -272,27 +271,27 @@
   /* ---------- 各段渲染 ---------- */
   function render(d, rtt) {
     $('tVer').textContent = d.version;
-    $('tRoom').textContent = d.room === 'test' ? 'test（内存里的，不落盘）' : 'real（真的）';
+    $('tRoom').textContent = d.room === 'test' ? 'test (in memory, never saved)' : 'real (live)';
     $('tRoom').className = d.room === 'test' ? 'ok' : '';
     $('tUp').textContent = dur(d.uptimeSec);
     $('tNow').textContent = d.nowText;
     $('tRtt').textContent = rtt + ' ms';
-    $('tState').textContent = paused ? '已暂停' : '每 ' + (EVERY / 1000) + ' 秒重读';
+    $('tState').textContent = paused ? 'Paused' : 'Re-reading every ' + (EVERY / 1000) + 's';
     $('tState').className = paused ? 'warn' : 'dim';
 
     // 在线连接
     $('cN').textContent = d.clients.length + ' / ' + d.config.maxClients;
     table($('cBox'), [
-      { h: '名字',   v: c => c.name },
-      { h: '设备',   v: c => shortUA(c.ua) },
-      { h: '页面版本', v: c => (c.ver || '没报') + (c.ver === d.version ? '' : ' ⚠') },
-      { h: '已连接', v: c => dur(c.sinceSec) },
-      { h: '静默',   v: c => c.idleSec + 's' },
-      { h: '挂着请求', v: c => (c.waiting ? '是' : '否') },
-      { h: '队列',   v: c => c.queued },
-      { h: '入口',   v: c => c.host || '?' },
-      { h: '来源',   v: c => c.ip || '?' },
-      { h: '设备号', v: c => c.dev || '（没报）' },
+      { h: 'Name',      v: c => c.name },
+      { h: 'Device',    v: c => shortUA(c.ua) },
+      { h: 'Page ver',  v: c => (c.ver || 'not reported') + (c.ver === d.version ? '' : ' ⚠') },
+      { h: 'Connected', v: c => dur(c.sinceSec) },
+      { h: 'Idle',      v: c => c.idleSec + 's' },
+      { h: 'Waiting',   v: c => (c.waiting ? 'yes' : 'no') },
+      { h: 'Queue',     v: c => c.queued },
+      { h: 'Host',      v: c => c.host || '?' },
+      { h: 'IP',        v: c => c.ip || '?' },
+      { h: 'Device id', v: c => c.dev || '(not reported)' },
       { h: 'id',     v: c => c.id },
       { h: 'UA',     v: c => c.ua, cls: 'wrap' },
     ], d.clients);
@@ -300,29 +299,30 @@
     // 被顶掉的
     $('eN').textContent = d.evicted.length;
     table($('eBox'), [
-      { h: 'id',   v: e => e.id },
-      { h: '原因', v: e => (e.why === 'stale' ? 'stale（页面版本不对）' : e.why) },
-      { h: '多久前', v: e => dur(e.agoSec) },
+      { h: 'id',     v: e => e.id },
+      { h: 'Reason', v: e => (e.why === 'stale' ? 'stale (page version mismatch)' : e.why) },
+      { h: 'Ago',    v: e => dur(e.agoSec) },
     ], d.evicted);
 
     // 计数
     const by = n => Object.keys(n).length
-      ? Object.entries(n).map(([k, v]) => k + ' ' + v).join('　')
-      : '（还没有）';
+      ? Object.entries(n).map(([k, v]) => k + ' ' + v).join(' · ')
+      : '(none yet)';
     dict($('sBox'), [
-      ['今天', d.stats.today + ' 下　' + by(d.stats.todayByName)],
-      ['累计', d.stats.total + ' 下　' + by(d.byName)],
-      ['同频', d.stats.syncs + ' 次'],
-      ['今天是', d.day.date || '（还没算过）'],
-      ['上一次心跳', d.lastTap
-        ? d.lastTap.name + '，' + (d.lastTap.agoMs / 1000).toFixed(1) + ' 秒前' +
-          '（再有别人点，' + (d.lastTap.agoMs < d.config.syncWindow ? '算同频' : '不算了') + '）'
-        : '（这轮还没人点，或者刚撞过同频清掉了）'],
-      ['存档', !d.persist ? 'test 房间不落盘，服务端一重启就干净'
-        : d.data ? 'hearts.json · ' + size(d.data.bytes) + ' · 存于 ' + d.data.savedAt
-        : '还没落盘'],
-      ['假的 TA', d.bot ? '在房间里（同频模式开着）' : '不在'],
-      ['进程', 'Node ' + d.node + ' · 内存 ' + size(d.rssBytes) + ' · 端口 ' + d.port],
+      ['Today', d.stats.today + ' taps · ' + by(d.stats.todayByName)],
+      ['All time', d.stats.total + ' taps · ' + by(d.byName)],
+      ['In sync', d.stats.syncs + ' times'],
+      ['Counting day', d.day.date || '(not counted yet)'],
+      ['Last heartbeat', d.lastTap
+        ? d.lastTap.name + ', ' + (d.lastTap.agoMs / 1000).toFixed(1) + 's ago' +
+          ' (another tap now ' +
+          (d.lastTap.agoMs < d.config.syncWindow ? 'counts as in sync' : 'no longer counts') + ')'
+        : '(nobody has tapped yet, or a sync just cleared it)'],
+      ['Save file', !d.persist ? 'the test room is never saved — a restart wipes it'
+        : d.data ? 'hearts.json · ' + size(d.data.bytes) + ' · saved at ' + d.data.savedAt
+        : 'not saved yet'],
+      ['Fake partner', d.bot ? 'in the room (sync mode is on)' : 'not here'],
+      ['Process', 'Node ' + d.node + ' · memory ' + size(d.rssBytes) + ' · port ' + d.port],
     ]);
 
     // 攒着的
@@ -330,9 +330,9 @@
     sb.textContent = '';
     const hearts = Object.entries(d.stash.hearts);
     sb.appendChild(text('div', hearts.length
-      ? '心跳：' + hearts.map(([k, v]) => k + ' ' + v + ' 下').join('　')
-      : '心跳：没有', hearts.length ? '' : 'dim'));
-    sb.appendChild(text('div', '纸条：' + (d.stash.notes.length || '没有'),
+      ? 'Heartbeats: ' + hearts.map(([k, v]) => k + ' ' + v).join(' · ')
+      : 'Heartbeats: none', hearts.length ? '' : 'dim'));
+    sb.appendChild(text('div', 'Notes: ' + (d.stash.notes.length || 'none'),
       d.stash.notes.length ? '' : 'dim'));
     if (d.stash.notes.length) {
       const wrap = document.createElement('div');
@@ -342,20 +342,20 @@
     }
 
     // 音乐
-    $('mN').textContent = d.tracks.length + ' 首';
-    table($('mBox'), [{ h: '文件名', v: t => t.name, cls: 'wrap' }],
+    $('mN').textContent = d.tracks.length + ' files';
+    table($('mBox'), [{ h: 'Filename', v: t => t.name, cls: 'wrap' }],
       d.tracks.map(name => ({ name })));
 
     // 参数
     const c = d.config;
     dict($('kBox'), [
-      ['最多几台在线', c.maxClients + ' 台'],
-      ['同频窗口', c.syncWindow + ' ms'],
-      ['纸条上限', c.maxNote + ' 字'],
-      ['攒纸条上限', c.maxStashNotes + ' 条'],
-      ['一个 poll 最多挂', c.holdMs + ' ms'],
-      ['多久没来算离开', c.clientTimeout + ' ms'],
-      ['每 10 秒最多发', c.msgCap + ' 条'],
+      ['Max clients online', c.maxClients],
+      ['Sync window', c.syncWindow + ' ms'],
+      ['Note length limit', c.maxNote + ' chars'],
+      ['Stashed notes limit', c.maxStashNotes],
+      ['A poll hangs at most', c.holdMs + ' ms'],
+      ['Silent this long = gone', c.clientTimeout + ' ms'],
+      ['Messages per 10s', c.msgCap],
     ]);
 
     $('raw').textContent = JSON.stringify(d, null, 2);
@@ -399,7 +399,7 @@
   // 内容没变就不重画，免得正看着的时候被滚回顶上
   async function histLoad() {
     const date = histDate.value;
-    if (!date) { $('histBox').textContent = '还没有任何记录'; $('histN').textContent = ''; return; }
+    if (!date) { $('histBox').textContent = 'No history yet'; $('histN').textContent = ''; return; }
     try {
       const r = await fetch('/history?key=' + q(myKey) + '&date=' + q(date));
       if (!r.ok) throw new Error(String(r.status));
@@ -407,14 +407,14 @@
       const sig = date + '·' + notes.length + '·' + (notes.length ? notes[notes.length - 1].t : '');
       if (sig === notesSig) return;
       notesSig = sig;
-      $('histN').textContent = notes.length + ' 条' +
-        (notes.length > NOTE_CAP ? '，只画最后 ' + NOTE_CAP + ' 条' : '');
-      if (!notes.length) { $('histBox').textContent = '这天没有纸条'; return; }
+      $('histN').textContent = notes.length + ' notes' +
+        (notes.length > NOTE_CAP ? ', showing the last ' + NOTE_CAP : '');
+      if (!notes.length) { $('histBox').textContent = 'No notes on this day'; return; }
       const box = $('histBox');
       notesInto(box, notes.slice(-NOTE_CAP));
       box.scrollTop = box.scrollHeight;
     } catch (e) {
-      $('histBox').textContent = '读不到记录（' + e.message + '）';
+      $('histBox').textContent = "Can't read the history (" + e.message + ')';
     }
   }
 
@@ -425,12 +425,12 @@
     const t0 = performance.now();
     try {
       const r = await fetch('/state?key=' + q(myKey) + rq());
-      if (r.status === 401) throw new Error('口令不对了');
+      if (r.status === 401) throw new Error('password no longer accepted');
       if (!r.ok) throw new Error(String(r.status));
       const d = await r.json();
       render(d, Math.round(performance.now() - t0));
     } catch (e) {
-      $('tState').textContent = '读不到：' + e.message;
+      $('tState').textContent = "Can't read: " + e.message;
       $('tState').className = 'warn';
     }
   }
@@ -442,18 +442,18 @@
 
   $('pauseBtn').addEventListener('click', () => {
     paused = !paused;
-    $('pauseBtn').textContent = paused ? '继续' : '暂停';
+    $('pauseBtn').textContent = paused ? 'Resume' : 'Pause';
     $('pauseBtn').classList.toggle('on', paused);
     loop(!paused);
     if (!paused) tickOnce();
-    else { $('tState').textContent = '已暂停'; $('tState').className = 'warn'; }
+    else { $('tState').textContent = 'Paused'; $('tState').className = 'warn'; }
   });
   $('nowBtn').addEventListener('click', tickOnce);
 
   // 在 /test 里点心跳，得切到 test 房间才看得见
   $('roomBtn').addEventListener('click', () => {
     room = room ? '' : 'test';
-    $('roomBtn').textContent = '看：' + (room ? 'test 房间' : '真房间');
+    $('roomBtn').textContent = room ? 'Test Room' : 'Online Room';
     $('roomBtn').classList.toggle('on', !!room);
     dateSig = null; notesSig = null;      // 两个房间的纸条不是一回事，重画
     tickOnce();
@@ -469,8 +469,9 @@
   })();
 
   async function openView(k) {
-    const r = await fetch('/check?key=' + q(k));
-    if (!r.ok) throw new Error('口令不对');
+    // for=debug：验的是调试口令（DEBUG_KEY），不是房间口令
+    const r = await fetch('/check?for=debug&key=' + q(k));
+    if (!r.ok) throw new Error('Wrong password');
     myKey = k;
     gate.classList.add('hide');
     for (const id of ['top', 'body', 'foot']) $(id).hidden = false;
