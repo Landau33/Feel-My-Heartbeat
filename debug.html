@@ -1,0 +1,508 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#0d0b18">
+<title>调试台 · Feel My Heartbeat</title>
+<style>
+  /* 跟主页面同一套颜色，但这一页是纯看的：没有心跳、没有音乐、不进房间 */
+  :root {
+    --ink:      #0d0b18;
+    --ink-soft: #171430;
+    --haze:     #2a2450;
+    --mine:     #ff5f8d;
+    --yours:    #5ec8ff;
+    --gold:     #ffd76e;
+    --text:     #e8e4ff;
+    --dim:      #7d76a8;
+    --mono: ui-monospace, "SF Mono", "Cascadia Mono", Menlo, monospace;
+    --sans: "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", system-ui, sans-serif;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0; min-height: 100vh;
+    background: var(--ink); color: var(--text);
+    font-family: var(--mono); font-size: 12px; line-height: 1.7;
+  }
+
+  /* ---------- 口令 ---------- */
+  .gate {
+    position: fixed; inset: 0; z-index: 10;
+    display: grid; place-content: center; gap: 12px;
+    padding: 24px; background: var(--ink); text-align: center;
+  }
+  .gate.hide { display: none; }
+  .gate h1 { margin: 0; font-size: 15px; font-weight: 600; letter-spacing: .04em; }
+  .gate p { margin: 0; color: var(--dim); font-size: 11px; }
+  .gate input {
+    width: min(280px, 80vw); padding: 9px 12px;
+    background: var(--ink-soft); color: var(--text);
+    border: 1px solid var(--haze); border-radius: 9px;
+    font-family: var(--mono); font-size: 13px; text-align: center;
+  }
+  .gate button {
+    justify-self: center; padding: 8px 22px; border: 0; border-radius: 9px;
+    background: var(--yours); color: #04192b;
+    font-family: var(--sans); font-size: 13px; font-weight: 600; cursor: pointer;
+  }
+  .gate .err { min-height: 16px; color: var(--mine); font-size: 11px; }
+
+  /* ---------- 顶栏 ---------- */
+  .top {
+    position: sticky; top: 0; z-index: 5;
+    display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: baseline;
+    padding: 10px 14px;
+    background: rgba(13,11,24,.96); border-bottom: 1px solid var(--haze);
+    backdrop-filter: blur(8px);
+  }
+  .top .name { color: var(--gold); font-weight: 600; letter-spacing: .04em; }
+  .top .k { color: var(--dim); }
+  .top .spacer { flex: 1; }
+  .top button {
+    padding: 3px 10px; border: 1px solid var(--haze); border-radius: 7px;
+    background: transparent; color: var(--dim);
+    font-family: var(--mono); font-size: 11px; cursor: pointer;
+  }
+  .top button:hover { color: var(--text); }
+  .top button.on { color: var(--gold); border-color: rgba(255,215,110,.5); }
+
+  main { padding: 14px; display: grid; gap: 16px; max-width: 1100px; }
+
+  section { border: 1px solid var(--haze); border-radius: 10px; overflow: hidden; }
+  section > h2 {
+    margin: 0; padding: 7px 11px;
+    background: var(--ink-soft); border-bottom: 1px solid var(--haze);
+    font-family: var(--sans); font-size: 12px; font-weight: 600;
+    color: var(--dim); letter-spacing: .06em;
+  }
+  section > h2 b { color: var(--text); font-weight: 600; }
+  .box { padding: 9px 11px; overflow-x: auto; }
+
+  table { width: 100%; border-collapse: collapse; font-size: 11px; }
+  th, td {
+    padding: 4px 9px 4px 0; text-align: left; vertical-align: top;
+    white-space: nowrap;
+  }
+  th { color: var(--dim); font-weight: 400; border-bottom: 1px solid var(--haze); }
+  td.wrap { white-space: normal; word-break: break-all; min-width: 180px; }
+
+  dl { margin: 0; display: grid; grid-template-columns: max-content 1fr; gap: 2px 14px; }
+  dt { color: var(--dim); }
+  dd { margin: 0; word-break: break-all; }
+
+  .pre { margin: 0; white-space: pre-wrap; word-break: break-all; font-size: 11px; }
+  .dim { color: var(--dim); }
+  .warn { color: var(--mine); }
+  .ok { color: var(--yours); }
+
+  .notes { max-height: 42vh; overflow: auto; }
+  .notes > div { display: flex; gap: 8px; }
+  .notes i { color: var(--haze); font-style: normal; white-space: nowrap; }
+  .notes b { color: var(--yours); font-weight: 600; }
+  .notes span { word-break: break-word; }
+
+  .picker { display: flex; gap: 7px; align-items: center; margin-bottom: 7px; }
+  .picker select {
+    padding: 3px 5px; background: var(--ink-soft); color: var(--text);
+    border: 1px solid var(--haze); border-radius: 7px;
+    font-family: var(--mono); font-size: 11px;
+  }
+
+  details summary { cursor: pointer; color: var(--dim); }
+  .foot { padding: 0 14px 20px; color: var(--haze); font-size: 11px; }
+</style>
+</head>
+<body>
+
+<div class="gate" id="gate">
+  <h1>调试台</h1>
+  <p>只读。这一页不进房间，不算在线人数，也点不出心跳。</p>
+  <input id="keyInput" type="password" placeholder="口令" autocomplete="current-password">
+  <div class="err" id="err"></div>
+  <button id="enterBtn">看</button>
+</div>
+
+<div class="top" id="top" hidden>
+  <span class="name">调试台</span>
+  <span><span class="k">服务端</span> <span id="tVer">–</span></span>
+  <span><span class="k">房间</span> <span id="tRoom">–</span></span>
+  <span><span class="k">运行</span> <span id="tUp">–</span></span>
+  <span><span class="k">现在</span> <span id="tNow">–</span></span>
+  <span><span class="k">读一次</span> <span id="tRtt">–</span></span>
+  <span class="spacer"></span>
+  <span id="tState" class="dim">–</span>
+  <button id="roomBtn">看：真房间</button>
+  <button id="pauseBtn">暂停</button>
+  <button id="nowBtn">刷新</button>
+</div>
+
+<main id="body" hidden>
+  <section>
+    <h2>在线连接 <b id="cN">–</b></h2>
+    <div class="box" id="cBox"></div>
+  </section>
+
+  <section>
+    <h2>刚被顶掉的 <b id="eN">–</b></h2>
+    <div class="box" id="eBox"></div>
+  </section>
+
+  <section>
+    <h2>计数</h2>
+    <div class="box"><dl id="sBox"></dl></div>
+  </section>
+
+  <section>
+    <h2>攒着没送出去的</h2>
+    <div class="box" id="stashBox"></div>
+  </section>
+
+  <section>
+    <h2>纸条记录</h2>
+    <div class="box">
+      <div class="picker">
+        <select id="histDate"></select>
+        <span class="dim" id="histN"></span>
+      </div>
+      <div class="notes" id="histBox"></div>
+    </div>
+  </section>
+
+  <section>
+    <h2>music 文件夹 <b id="mN">–</b></h2>
+    <div class="box" id="mBox"></div>
+  </section>
+
+  <section>
+    <h2>服务端参数</h2>
+    <div class="box"><dl id="kBox"></dl></div>
+  </section>
+
+  <section>
+    <h2>原始 /state</h2>
+    <div class="box">
+      <details>
+        <summary>展开看整包 JSON</summary>
+        <pre class="pre" id="raw"></pre>
+      </details>
+    </div>
+  </section>
+</main>
+
+<div class="foot" id="foot" hidden>
+  这一页只发 GET /state、/history、/check —— 看什么都不会改到房间里的东西。
+</div>
+
+<script>
+(function () {
+  const $ = id => document.getElementById(id);
+  const gate = $('gate'), keyIn = $('keyInput'), errEl = $('err'), enterBtn = $('enterBtn');
+  const EVERY = 2000;                 // 隔多久重读一次 /state
+  const NOTE_CAP = 300;               // 一天几千条纸条全画出来页面会卡，只画最后这些
+
+  let myKey = '';
+  let room = '';              // '' 是真房间，'test' 是 /test 那个内存房间
+  let paused = false;
+  let timer = null;
+  let newest = '';            // 记录最新的那一天，只有它需要不停回读
+
+  const q = s => encodeURIComponent(s);
+  const rq = () => (room ? '&room=' + room : '');
+  const dur = sec => {
+    sec = Math.max(0, Math.round(sec));
+    const d = Math.floor(sec / 86400), h = Math.floor(sec % 86400 / 3600);
+    const m = Math.floor(sec % 3600 / 60), s = sec % 60;
+    if (d) return d + '天' + h + '时';
+    if (h) return h + '时' + m + '分';
+    if (m) return m + '分' + s + '秒';
+    return s + '秒';
+  };
+  const size = n => n < 1024 ? n + ' B'
+    : n < 1024 * 1024 ? (n / 1024).toFixed(1) + ' KB'
+    : (n / 1048576).toFixed(1) + ' MB';
+
+  // 长长一串 User-Agent 缩成「iPhone Safari」这种。Chrome 的 UA 里也带 Safari，
+  // 所以要先认 Chrome
+  function shortUA(ua) {
+    ua = String(ua || '');
+    const dev = /iPhone/.test(ua) ? 'iPhone' : /iPad/.test(ua) ? 'iPad' :
+                /Android/.test(ua) ? 'Android' : /Macintosh/.test(ua) ? 'Mac' :
+                /Windows/.test(ua) ? 'Windows' : /Linux/.test(ua) ? 'Linux' : '不知什么设备';
+    const br = /Edg[A-Z]?\//.test(ua) ? 'Edge' :
+               /CriOS|Chrome\//.test(ua) ? 'Chrome' :
+               /FxiOS|Firefox/.test(ua) ? 'Firefox' :
+               /Safari\//.test(ua) ? 'Safari' : '不知什么浏览器';
+    return dev + ' ' + br;
+  }
+
+  // 表格和字典都逐个建节点，服务端来的字符串一律不拼进 HTML
+  function table(box, cols, rows) {
+    box.textContent = '';
+    if (!rows.length) { box.append(text('span', '（空）', 'dim')); return; }
+    const t = document.createElement('table');
+    const hr = document.createElement('tr');
+    for (const c of cols) hr.appendChild(text('th', c.h));
+    t.appendChild(hr);
+    for (const r of rows) {
+      const tr = document.createElement('tr');
+      for (const c of cols) tr.appendChild(text('td', c.v(r), c.cls));
+      t.appendChild(tr);
+    }
+    box.appendChild(t);
+  }
+
+  function text(tag, s, cls) {
+    const el = document.createElement(tag);
+    el.textContent = s == null ? '' : String(s);
+    if (cls) el.className = cls;
+    return el;
+  }
+
+  function dict(box, pairs) {
+    box.textContent = '';
+    for (const [k, v, cls] of pairs) {
+      box.appendChild(text('dt', k));
+      box.appendChild(text('dd', v, cls));
+    }
+  }
+
+  /* ---------- 各段渲染 ---------- */
+  function render(d, rtt) {
+    $('tVer').textContent = d.version;
+    $('tRoom').textContent = d.room === 'test' ? 'test（内存里的，不落盘）' : 'real（真的）';
+    $('tRoom').className = d.room === 'test' ? 'ok' : '';
+    $('tUp').textContent = dur(d.uptimeSec);
+    $('tNow').textContent = d.nowText;
+    $('tRtt').textContent = rtt + ' ms';
+    $('tState').textContent = paused ? '已暂停' : '每 ' + (EVERY / 1000) + ' 秒重读';
+    $('tState').className = paused ? 'warn' : 'dim';
+
+    // 在线连接
+    $('cN').textContent = d.clients.length + ' / ' + d.config.maxClients;
+    table($('cBox'), [
+      { h: '名字',   v: c => c.name },
+      { h: '设备',   v: c => shortUA(c.ua) },
+      { h: '页面版本', v: c => (c.ver || '没报') + (c.ver === d.version ? '' : ' ⚠') },
+      { h: '已连接', v: c => dur(c.sinceSec) },
+      { h: '静默',   v: c => c.idleSec + 's' },
+      { h: '挂着请求', v: c => (c.waiting ? '是' : '否') },
+      { h: '队列',   v: c => c.queued },
+      { h: '入口',   v: c => c.host || '?' },
+      { h: '来源',   v: c => c.ip || '?' },
+      { h: '设备号', v: c => c.dev || '（没报）' },
+      { h: 'id',     v: c => c.id },
+      { h: 'UA',     v: c => c.ua, cls: 'wrap' },
+    ], d.clients);
+
+    // 被顶掉的
+    $('eN').textContent = d.evicted.length;
+    table($('eBox'), [
+      { h: 'id',   v: e => e.id },
+      { h: '原因', v: e => (e.why === 'stale' ? 'stale（页面版本不对）' : e.why) },
+      { h: '多久前', v: e => dur(e.agoSec) },
+    ], d.evicted);
+
+    // 计数
+    const by = n => Object.keys(n).length
+      ? Object.entries(n).map(([k, v]) => k + ' ' + v).join('　')
+      : '（还没有）';
+    dict($('sBox'), [
+      ['今天', d.stats.today + ' 下　' + by(d.stats.todayByName)],
+      ['累计', d.stats.total + ' 下　' + by(d.byName)],
+      ['同频', d.stats.syncs + ' 次'],
+      ['今天是', d.day.date || '（还没算过）'],
+      ['上一次心跳', d.lastTap
+        ? d.lastTap.name + '，' + (d.lastTap.agoMs / 1000).toFixed(1) + ' 秒前' +
+          '（再有别人点，' + (d.lastTap.agoMs < d.config.syncWindow ? '算同频' : '不算了') + '）'
+        : '（这轮还没人点，或者刚撞过同频清掉了）'],
+      ['存档', !d.persist ? 'test 房间不落盘，服务端一重启就干净'
+        : d.data ? 'hearts.json · ' + size(d.data.bytes) + ' · 存于 ' + d.data.savedAt
+        : '还没落盘'],
+      ['假的 TA', d.bot ? '在房间里（同频模式开着）' : '不在'],
+      ['进程', 'Node ' + d.node + ' · 内存 ' + size(d.rssBytes) + ' · 端口 ' + d.port],
+    ]);
+
+    // 攒着的
+    const sb = $('stashBox');
+    sb.textContent = '';
+    const hearts = Object.entries(d.stash.hearts);
+    sb.appendChild(text('div', hearts.length
+      ? '心跳：' + hearts.map(([k, v]) => k + ' ' + v + ' 下').join('　')
+      : '心跳：没有', hearts.length ? '' : 'dim'));
+    sb.appendChild(text('div', '纸条：' + (d.stash.notes.length || '没有'),
+      d.stash.notes.length ? '' : 'dim'));
+    if (d.stash.notes.length) {
+      const wrap = document.createElement('div');
+      wrap.className = 'notes';
+      notesInto(wrap, d.stash.notes);
+      sb.appendChild(wrap);
+    }
+
+    // 音乐
+    $('mN').textContent = d.tracks.length + ' 首';
+    table($('mBox'), [{ h: '文件名', v: t => t.name, cls: 'wrap' }],
+      d.tracks.map(name => ({ name })));
+
+    // 参数
+    const c = d.config;
+    dict($('kBox'), [
+      ['最多几台在线', c.maxClients + ' 台'],
+      ['同频窗口', c.syncWindow + ' ms'],
+      ['纸条上限', c.maxNote + ' 字'],
+      ['攒纸条上限', c.maxStashNotes + ' 条'],
+      ['一个 poll 最多挂', c.holdMs + ' ms'],
+      ['多久没来算离开', c.clientTimeout + ' ms'],
+      ['每 10 秒最多发', c.msgCap + ' 条'],
+    ]);
+
+    $('raw').textContent = JSON.stringify(d, null, 2);
+
+    // 日期清单跟着变（今天第一条纸条落盘时会多出一天）
+    fillDates(d.historyDates);
+    if (histDate.value && histDate.value === newest) histLoad();
+  }
+
+  function notesInto(box, notes) {
+    box.textContent = '';
+    for (const n of notes) {
+      const line = document.createElement('div');
+      line.append(text('i', n.time || ''), text('b', n.name), text('span', n.text));
+      box.appendChild(line);
+    }
+  }
+
+  /* ---------- 纸条记录 ---------- */
+  const histDate = $('histDate');
+  let dateSig = null, notesSig = null;
+
+  function fillDates(dates) {
+    const sig = dates.join();
+    if (sig === dateSig) return;
+    dateSig = sig;
+    const keep = histDate.value;
+    histDate.textContent = '';
+    for (const d of dates) {
+      const o = document.createElement('option');
+      o.value = d;
+      o.textContent = d.slice(0, 4) + '-' + d.slice(4, 6) + '-' + d.slice(6);
+      histDate.appendChild(o);
+    }
+    histDate.value = dates.includes(keep) ? keep : (dates[0] || '');
+    newest = dates[0] || '';
+    histLoad();
+  }
+
+  // 看的是最新那天就每轮都回读一次，新纸条自己会冒出来；
+  // 内容没变就不重画，免得正看着的时候被滚回顶上
+  async function histLoad() {
+    const date = histDate.value;
+    if (!date) { $('histBox').textContent = '还没有任何记录'; $('histN').textContent = ''; return; }
+    try {
+      const r = await fetch('/history?key=' + q(myKey) + '&date=' + q(date));
+      if (!r.ok) throw new Error(String(r.status));
+      const notes = (await r.json()).notes || [];
+      const sig = date + '·' + notes.length + '·' + (notes.length ? notes[notes.length - 1].t : '');
+      if (sig === notesSig) return;
+      notesSig = sig;
+      $('histN').textContent = notes.length + ' 条' +
+        (notes.length > NOTE_CAP ? '，只画最后 ' + NOTE_CAP + ' 条' : '');
+      if (!notes.length) { $('histBox').textContent = '这天没有纸条'; return; }
+      const box = $('histBox');
+      notesInto(box, notes.slice(-NOTE_CAP));
+      box.scrollTop = box.scrollHeight;
+    } catch (e) {
+      $('histBox').textContent = '读不到记录（' + e.message + '）';
+    }
+  }
+
+  histDate.addEventListener('change', () => { notesSig = null; histLoad(); });
+
+  /* ---------- 轮询 ---------- */
+  async function tickOnce() {
+    const t0 = performance.now();
+    try {
+      const r = await fetch('/state?key=' + q(myKey) + rq());
+      if (r.status === 401) throw new Error('口令不对了');
+      if (!r.ok) throw new Error(String(r.status));
+      const d = await r.json();
+      render(d, Math.round(performance.now() - t0));
+    } catch (e) {
+      $('tState').textContent = '读不到：' + e.message;
+      $('tState').className = 'warn';
+    }
+  }
+
+  function loop(on) {
+    clearInterval(timer);
+    timer = on ? setInterval(() => { if (!document.hidden) tickOnce(); }, EVERY) : null;
+  }
+
+  $('pauseBtn').addEventListener('click', () => {
+    paused = !paused;
+    $('pauseBtn').textContent = paused ? '继续' : '暂停';
+    $('pauseBtn').classList.toggle('on', paused);
+    loop(!paused);
+    if (!paused) tickOnce();
+    else { $('tState').textContent = '已暂停'; $('tState').className = 'warn'; }
+  });
+  $('nowBtn').addEventListener('click', tickOnce);
+
+  // 在 /test 里点心跳，得切到 test 房间才看得见
+  $('roomBtn').addEventListener('click', () => {
+    room = room ? '' : 'test';
+    $('roomBtn').textContent = '看：' + (room ? 'test 房间' : '真房间');
+    $('roomBtn').classList.toggle('on', !!room);
+    dateSig = null; notesSig = null;      // 两个房间的纸条不是一回事，重画
+    tickOnce();
+  });
+
+  // 口令：优先用网址上带的（手机上直接开一个书签就行），其次用主页面存下的那个。
+  // 带过来的当场从地址栏抹掉，不留在历史记录里
+  function fromUrl() {
+    const k = new URLSearchParams(location.search).get('key') || '';
+    if (k) {
+      try { history.replaceState(null, '', location.pathname); } catch (e) {}
+    }
+    return k;
+  }
+
+  function saved() {
+    try { return localStorage.getItem('heart-key') || ''; } catch (e) { return ''; }
+  }
+
+  async function openView(k) {
+    const r = await fetch('/check?key=' + q(k));
+    if (!r.ok) throw new Error('口令不对');
+    myKey = k;
+    gate.classList.add('hide');
+    for (const id of ['top', 'body', 'foot']) $(id).hidden = false;
+    await tickOnce();
+    loop(true);
+  }
+
+  enterBtn.addEventListener('click', async () => {
+    const k = keyIn.value;
+    if (!k) return keyIn.focus();
+    errEl.textContent = '';
+    enterBtn.disabled = true;
+    try {
+      await openView(k);
+    } catch (e) {
+      errEl.textContent = e.message;
+    }
+    enterBtn.disabled = false;
+  });
+  keyIn.addEventListener('keydown', e => { if (e.key === 'Enter') enterBtn.click(); });
+
+  (async () => {
+    const k = fromUrl() || saved();
+    if (k) { try { return await openView(k); } catch (e) {} }
+    keyIn.focus();
+  })();
+})();
+</script>
+</body>
+</html>

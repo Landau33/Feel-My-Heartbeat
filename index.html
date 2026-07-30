@@ -228,6 +228,21 @@
   .icon:focus-visible { outline: 2px solid var(--mine); outline-offset: 2px; }
   .icon.gone { display: none; }
 
+  /* ---------- /test：同一个页面，进的是内存里的 test 房间 ---------- */
+  /* 一眼看出这不是真房间，免得在这儿点了半天以为对方收到了 */
+  .testonly { display: none; }
+  #stage.test .testonly { display: inline-flex; }
+  .test-tag {
+    align-items: center; flex: none;
+    border: 1px solid rgba(255,215,110,.5); border-radius: 999px;
+    padding: 4px 9px; background: rgba(255,215,110,.1);
+    color: var(--gold); font-family: var(--mono); font-size: 10.5px;
+    letter-spacing: .04em; white-space: nowrap;
+  }
+  #stage.test { box-shadow: inset 0 0 0 2px rgba(255,215,110,.22); }
+  .icon.on { color: var(--gold); border-color: rgba(255,215,110,.6); }
+  .compact .test-tag { padding: 2px 6px; font-size: 9px; }
+
   /* 正在放的那首。进度不另画一条，直接从左往右把底色铺过去 */
   .nowplay {
     position: relative; overflow: hidden; min-width: 0; max-width: 38%;
@@ -307,53 +322,6 @@
     background: var(--yours); color: #04192b;
     font-size: 14px; font-weight: 600; font-family: var(--sans); cursor: pointer;
   }
-
-  /* ---------- 调试面板：网址后面加 ?debug 才出现 ---------- */
-  .dbg {
-    position: fixed; left: 8px; bottom: 8px; z-index: 99;
-    max-width: min(430px, 92vw); max-height: 46vh; overflow: auto;
-    margin: 0; padding: 10px 12px;
-    background: rgba(9,8,18,.94); border: 1px solid var(--haze);
-    border-radius: 10px; white-space: pre-wrap; word-break: break-all;
-    font-family: var(--mono); font-size: 11px; line-height: 1.65;
-    color: var(--dim); -webkit-user-select: text; user-select: text;
-  }
-  .dbg.hide { display: none; }
-
-  /* 聊天记录：跟调试面板一样只在 ?debug 下出现，靠右下角 */
-  .hist {
-    position: fixed; right: 8px; bottom: 8px; z-index: 99;
-    width: min(340px, 92vw); max-height: 46vh;
-    display: flex; flex-direction: column;
-    background: rgba(9,8,18,.94); border: 1px solid var(--haze);
-    border-radius: 10px; overflow: hidden;
-    font-family: var(--mono); font-size: 11px; color: var(--dim);
-  }
-  .hist.hide { display: none; }
-  .hist-top {
-    display: flex; gap: 6px; align-items: center;
-    padding: 7px 8px; border-bottom: 1px solid var(--haze);
-  }
-  .hist-top select {
-    flex: 1; min-width: 0; padding: 3px 4px;
-    background: var(--ink-soft); color: var(--text);
-    border: 1px solid var(--haze); border-radius: 6px;
-    font-family: var(--mono); font-size: 11px;
-  }
-  .hist-top button {
-    padding: 3px 8px; border: 1px solid var(--haze); border-radius: 6px;
-    background: transparent; color: var(--dim);
-    font-family: var(--mono); font-size: 11px; cursor: pointer;
-  }
-  .hist-top button:hover { color: var(--text); }
-  .hist-body {
-    margin: 0; padding: 8px; overflow: auto;
-    white-space: pre-wrap; word-break: break-word; line-height: 1.7;
-    -webkit-user-select: text; user-select: text;
-  }
-  .hist-body b { color: var(--yours); font-weight: 600; }
-  .hist-body b.me { color: var(--mine); }
-  .hist-body i { color: var(--haze); font-style: normal; }
 
   /* ---------- 说明 ---------- */
   .help {
@@ -507,6 +475,8 @@
       <span id="rosterFull">1 人在线 · 你</span><span id="rosterMini">等 TA 上线</span>
     </span>
     <span class="spacer"></span>
+    <span class="test-tag testonly">测试房间</span>
+    <button class="icon testonly" id="botBtn" title="一键叫来一个假的 TA，好试同频">同频模式</button>
     <span class="nowplay hide" id="nowPlay">
       <span class="np-name" id="npName"></span>
       <span class="np-time"><span id="npCur">0:00</span><span class="np-dur" id="npDur"></span></span>
@@ -520,7 +490,7 @@
   <div class="bottom">
     <div class="chips" id="chips"></div>
     <div class="compose">
-      <input id="noteInput" maxlength="60" placeholder="说句话，会飘在你俩屏幕上" autocomplete="off">
+      <input id="noteInput" maxlength="60" placeholder="Say something..." autocomplete="off">
       <button id="sendNote">送出</button>
     </div>
     <div class="tally">
@@ -613,16 +583,6 @@
   </div>
 </div>
 
-<pre class="dbg hide" id="dbg"></pre>
-
-<div class="hist hide" id="hist">
-  <div class="hist-top">
-    <select id="histDate"></select>
-    <button id="histReload">刷新</button>
-  </div>
-  <div class="hist-body" id="histBody"></div>
-</div>
-
 <script>
 (function () {
   const $ = id => document.getElementById(id);
@@ -668,171 +628,22 @@
   const doc = () => stage.ownerDocument;
   const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
 
-  /* ================= 调试 ================= */
-  // 网址后面加 ?debug，左下角会显示服务器推来的原始名单
-  const VERSION = '1.2.9';
-  const DEBUG = new URLSearchParams(location.search).has('debug');
-  const dbgEl = $('dbg');
-
-  // 登录页和说明面板里的版本号都从这里填，HTML 里不再写死一遍
+  // 版本号只写在这一处，登录页和说明面板里的都从这里填。
+  // 服务端那边的信息不在这个页面里，全都挪去了 /debug（只读，不进房间）
+  const VERSION = '1.2.10';
   $('gateVer').textContent = 'v' + VERSION;
   $('helpVer').textContent = 'v' + VERSION;
 
-  let lastOnline = null, lastTag = '还没收到事件';
-
-  // 服务器眼里的每条连接（/who 的内容）。名单里多出一台说不清是谁时，
-  // 就靠这几行认人：哪台设备、哪个浏览器、页面是哪版、从哪个网址进来的
-  let whoList = null, whoErr = '', whoTimer = null;
-
-  // 长长一串 User-Agent 缩成「iPhone Safari」这种。Chrome 的 UA 里也带 Safari，
-  // 所以要先认 Chrome
-  function shortUA(ua) {
-    ua = String(ua || '');
-    const dev = /iPhone/.test(ua) ? 'iPhone' : /iPad/.test(ua) ? 'iPad' :
-                /Android/.test(ua) ? 'Android' : /Macintosh/.test(ua) ? 'Mac' :
-                /Windows/.test(ua) ? 'Windows' : /Linux/.test(ua) ? 'Linux' : '不知什么设备';
-    const br = /Edg[A-Z]?\//.test(ua) ? 'Edge' :
-               /CriOS|Chrome\//.test(ua) ? 'Chrome' :
-               /FxiOS|Firefox/.test(ua) ? 'Firefox' :
-               /Safari\//.test(ua) ? 'Safari' : '不知什么浏览器';
-    return dev + ' ' + br;
+  // 网址是 /test 的话，进的是服务端内存里的 test 房间：同一个页面、同一套代码，
+  // 但统计不落盘、纸条不写进 history/、跟真房间里的人互相看不见 ——
+  // 想怎么点怎么点，TA 那边什么都感觉不到。
+  const TEST = location.pathname === '/test';
+  const ROOM = TEST ? '&room=test' : '';
+  const botBtn = $('botBtn');
+  if (TEST) {
+    stage.classList.add('test');
+    document.title = '测试房间 · Feel My Heartbeat';
   }
-
-  async function whoLoad() {
-    if (!DEBUG || !myKey) return;
-    try {
-      const r = await fetch('/who?key=' + encodeURIComponent(myKey));
-      if (!r.ok) throw new Error(String(r.status));
-      whoList = (await r.json()).连接 || [];
-      whoErr = '';
-    } catch (e) {
-      whoList = null;
-      whoErr = '读不到（' + e.message + '）';
-    }
-    dump();
-  }
-
-  function whoStart() {
-    if (!DEBUG) return;
-    whoLoad();
-    clearInterval(whoTimer);
-    whoTimer = setInterval(whoLoad, 5000);   // 静默秒数要走着看才有意义
-  }
-
-  function whoLines() {
-    if (whoErr) return '在线设备     ' + whoErr;
-    if (!whoList) return '在线设备     还没读到';
-    if (!whoList.length) return '在线设备     一个都没有';
-    return '在线设备     ' + whoList.length + ' 台\n' + whoList.map(c =>
-      '  ' + c.名字 + (c.id === myId ? '（你）' : '') +
-      ' · ' + shortUA(c.浏览器) +
-      ' · v' + (c.页面版本 || '?') +
-      ' · 静默 ' + c.静默秒数 + 's\n' +
-      '    ' + (c.入口 || '?') + ' ← ' + (c.来源 || '?')
-    ).join('\n');
-  }
-
-  function dump(tag) {
-    if (tag) lastTag = tag;
-    if (!DEBUG) return;
-    dbgEl.classList.remove('hide');
-    const rs = !myId ? '正在加入' : (running ? '轮询中' : '已停止');
-    dbgEl.textContent =
-      '前端版本     ' + VERSION + '  传输 长轮询\n' +
-      '服务端版本   ' + serverVersion + (serverVersion === VERSION ? '  一致' : '  ⚠ 不一致') + '\n' +
-      '我填的名字   ' + JSON.stringify(myName) + '\n' +
-      '我的连接 id  ' + (myId || '（还没拿到）') + '\n' +
-      '连接状态     ' + rs + (offline ? ' · 离线' : '') + '\n' +
-      '往返延迟     ' + (lastRtt === null ? '还没测到' : lastRtt + ' ms') + '\n' +
-      '最后一个事件 ' + lastTag + '  ' + new Date().toLocaleTimeString() + '\n' +
-      '服务器名单   ' + JSON.stringify(lastOnline) + '\n' +
-      whoLines();
-  }
-
-  /* ================= 聊天记录 ================= */
-  // 同样只在 ?debug 下出现。服务端一天一个文件，这里拉下来看。
-  const histEl = $('hist'), histDate = $('histDate'),
-        histBody = $('histBody'), histReload = $('histReload');
-  let histTimer = null;
-
-  // 260727 14:26:01。服务端已经附了 time 字段，这个是拿不到时的兜底
-  function when(t) {
-    const d = new Date(t);
-    const p = n => String(n).padStart(2, '0');
-    return String(d.getFullYear()).slice(2) + p(d.getMonth() + 1) + p(d.getDate()) +
-           ' ' + p(d.getHours()) + ':' + p(d.getMinutes()) + ':' + p(d.getSeconds());
-  }
-
-  function histRender(notes) {
-    histBody.textContent = '';
-    if (!notes.length) { histBody.textContent = '这天没有纸条'; return; }
-    // 逐个建节点，纸条内容不拼进 HTML
-    for (const n of notes) {
-      const line = document.createElement('div');
-      const time = document.createElement('i');
-      time.textContent = (n.time || when(n.t)) + '  ';
-      const who = document.createElement('b');
-      who.textContent = n.name + ' ';
-      if (n.name === myName) who.className = 'me';
-      line.append(time, who, document.createTextNode(n.text));
-      histBody.appendChild(line);
-    }
-    histBody.scrollTop = histBody.scrollHeight;
-  }
-
-  async function histLoad(date) {
-    if (!date) { histRender([]); return; }
-    try {
-      const r = await fetch('/history?key=' + encodeURIComponent(myKey) +
-                            '&date=' + encodeURIComponent(date));
-      if (!r.ok) throw new Error(String(r.status));
-      histRender((await r.json()).notes || []);
-    } catch (e) {
-      histBody.textContent = '读不到记录（' + e.message + '）';
-    }
-  }
-
-  async function histDates() {
-    try {
-      const r = await fetch('/history?key=' + encodeURIComponent(myKey));
-      if (!r.ok) throw new Error(String(r.status));
-      const dates = (await r.json()).dates || [];
-      const keep = histDate.value;
-      if (dates.join() !== [...histDate.options].map(o => o.value).join()) {
-        histDate.textContent = '';
-        for (const d of dates) {
-          const o = document.createElement('option');
-          o.value = d;
-          o.textContent = d.slice(0, 4) + '-' + d.slice(4, 6) + '-' + d.slice(6);
-          histDate.appendChild(o);
-        }
-      }
-      histDate.value = dates.includes(keep) ? keep : (dates[0] || '');
-      await histLoad(histDate.value);
-    } catch (e) {
-      histBody.textContent = '读不到日期清单（' + e.message + '）';
-    }
-  }
-
-  function histStart() {
-    if (!DEBUG) return;
-    histEl.classList.remove('hide');
-    histDates();
-    // 看的是今天就自动跟进，翻旧记录时不打扰
-    clearInterval(histTimer);
-    histTimer = setInterval(() => {
-      if (histDate.value && histDate.value === stampToday()) histDates();
-    }, 5000);
-  }
-
-  function stampToday() {
-    const d = new Date();
-    const p = n => String(n).padStart(2, '0');
-    return d.getFullYear() + p(d.getMonth() + 1) + p(d.getDate());
-  }
-
-  histDate.addEventListener('change', () => histLoad(histDate.value));
-  histReload.addEventListener('click', () => histDates());
 
   /* ================= 声音 ================= */
   let ac = null;
@@ -1238,7 +1049,7 @@
     fetch('/send', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(Object.assign({ id: myId, key: myKey }, obj)),
+      body: JSON.stringify(Object.assign({ id: myId, key: myKey, room: TEST ? 'test' : '' }, obj)),
     }).then(r => { if (r.status === 410) rejoin(); }).catch(() => {});
     return true;
   }
@@ -1247,9 +1058,7 @@
     flushTimer = null;
     if (!pending) return;
     const n = pending; pending = 0;
-    const nonce = Math.random().toString(36).slice(2, 8);
-    markSent(nonce);
-    wsSend({ t: 'tap', burst: n, n: nonce });
+    wsSend({ t: 'tap', burst: n });
   }
 
   function queue(n) {
@@ -1261,22 +1070,6 @@
     const count = n || (7 + Math.floor(Math.random() * 5));
     burst('mine', count);
     queue(count);
-  }
-
-  // 量一次完整往返：POST 出去 → 服务端广播 → 自己从 SSE 收回来
-  const rttWait = new Map();
-  let lastRtt = null;
-  function markSent(nonce) {
-    rttWait.set(nonce, performance.now());
-    setTimeout(() => rttWait.delete(nonce), 15000);
-    if (rttWait.size > 30) rttWait.clear();
-  }
-  function markBack(nonce) {
-    const t0 = rttWait.get(nonce);
-    if (!t0) return;
-    rttWait.delete(nonce);
-    lastRtt = Math.round(performance.now() - t0);
-    dump('往返 ' + lastRtt + 'ms');
   }
 
   /* ---- 按住连发 ---- */
@@ -1338,8 +1131,6 @@
     if (!t) return;
     showNote(t, 'mine');
     wsSend({ t: 'note', text: t });
-    // 自己刚发的，等服务端落盘再拉一次，面板上立刻能看到
-    if (DEBUG) setTimeout(histDates, 300);
   }
 
   function addChip(q, extra) {
@@ -1392,6 +1183,7 @@
   function applyRoster(online) {
     const n = new Map();
     for (const c of online) n.set(c.name, (n.get(c.name) || 0) + 1);
+
     const names = [...n.keys()];
 
     roster.people = names.length || 1;
@@ -1473,7 +1265,7 @@
       const r = await fetch('/join?key=' + encodeURIComponent(myKey) +
                             '&name=' + encodeURIComponent(myName) +
                             '&dev=' + encodeURIComponent(myDev) +
-                            '&ver=' + encodeURIComponent(VERSION), { method: 'POST' });
+                            '&ver=' + encodeURIComponent(VERSION) + ROOM, { method: 'POST' });
       if (!r.ok) throw new Error('join ' + r.status);
       myId = (await r.json()).id;
       alive();
@@ -1482,7 +1274,6 @@
       pollLoop();
     } catch (e) {
       poking = false;
-      dump('连不上，重试中');
       markOffline();
       clearTimeout(reconnectTimer);
       reconnectTimer = setTimeout(startPoll, 2000);
@@ -1511,21 +1302,16 @@
         running = false;
         bgmSync();
         renderStatus();
-        dump('版本不一致，需要刷新');
         return;
       }
       paint(d.stats);
 
     } else if (ev === 'presence') {
-      lastOnline = d.online || [];
       paint(d.stats);
-      applyRoster(lastOnline);
-      if (DEBUG) setTimeout(whoLoad, 200);   // 有人进出，顺手把设备清单也刷新
+      applyRoster(d.online || []);
 
     } else if (ev === 'tap') {
-      if (d.from === myId) {
-        markBack(d.n);                      // 自己那一下，本地已经播过了，只用来量往返
-      } else {
+      if (d.from !== myId) {              // 自己那一下，本地已经播过了
         const who = d.name === myName ? 'mine' : 'yours';
         burst(who, d.burst || 8);
         if (who === 'yours') peek();
@@ -1541,14 +1327,10 @@
       if (d.from !== myId) {
         showNote(d.text, d.name === myName ? 'mine' : 'yours');
         peek(3600);
-        if (DEBUG) setTimeout(histDates, 300);
       }
 
     } else if (ev === 'stash') {
       playStash(d);
-
-    } else if (ev === 'pong') {
-      markBack(d.n);
 
     } else if (ev === 'evicted') {
       // 版本对不上被请出去的，按「旧页面」提示，别说成「被顶掉了」——
@@ -1559,14 +1341,12 @@
       bgmSync();
       renderStatus();
     }
-
-    dump(ev);
   }
 
   async function pollLoop() {
     while (running && myId) {
       try {
-        const r = await fetch('/poll?key=' + encodeURIComponent(myKey) + '&id=' + myId);
+        const r = await fetch('/poll?key=' + encodeURIComponent(myKey) + '&id=' + myId + ROOM);
         if (r.status === 410) return rejoin();
         if (r.status === 204) continue;            // 上一个请求被顶替，接着挂
         if (!r.ok) throw new Error(String(r.status));
@@ -1574,7 +1354,6 @@
         const batch = await r.json();
         for (const m of batch) handle(m.ev, m.data || {});
       } catch (e) {
-        dump('轮询中断，重试中');
         markOffline();
         await new Promise(res => setTimeout(res, 1500));
       }
@@ -1611,7 +1390,8 @@
     clearTimeout(reconnectTimer); reconnectTimer = null;
     if (!myId) return;
     try {
-      const blob = new Blob([JSON.stringify({ id: myId, key: myKey })], { type: 'application/json' });
+      const blob = new Blob([JSON.stringify({ id: myId, key: myKey, room: TEST ? 'test' : '' })],
+                            { type: 'application/json' });
       navigator.sendBeacon('/leave', blob);
     } catch (e) {}
     myId = '';
@@ -1667,6 +1447,30 @@
   soundBtn.addEventListener('click', () => setSound(!soundOn));
   bgmBtn.addEventListener('click', () => setBgm(!bgmPref));
 
+  /* ---- 一键同频模式：只有 /test 有 ---- */
+  // 服务端往 test 房间里塞一个不需要浏览器的假 TA。它在名单里，所以这边立刻
+  // 就是「两个人都在」：背景冒小爱心、音乐放起来、同在开始计时；
+  // 你点一下心跳，它会在同频窗口内跟着点一下，两边一起爆金色。
+  let botWant = false;
+  async function setBot(on) {
+    botBtn.disabled = true;
+    try {
+      const r = await fetch('/bot?key=' + encodeURIComponent(myKey) + ROOM +
+                            '&on=' + (on ? '1' : '0'), { method: 'POST' });
+      if (!r.ok) throw new Error(String(r.status));
+      botWant = !!(await r.json()).bot;
+    } catch (e) {
+      botWant = false;
+    }
+    botBtn.disabled = false;
+    botBtn.classList.toggle('on', botWant);
+    botBtn.textContent = botWant ? '同频模式 开' : '同频模式';
+    botBtn.title = botWant
+      ? '假的 TA 在房间里，点一下心跳它会跟着点 —— 再按一下送走它'
+      : '一键叫来一个假的 TA，好试同频';
+  }
+  botBtn.addEventListener('click', () => setBot(!botWant));
+
   /* ================= 说明 ================= */
   function setHelp(open) {
     helpBox.classList.toggle('hide', !open);
@@ -1719,8 +1523,6 @@
     } catch (e) {}
     gate.classList.add('hide');
     connect();
-    histStart();
-    whoStart();
     bgmLoad();      // 先把曲目清单拿回来，等 TA 一上线就能立刻响
 
     // 第一次进来先把玩法讲一遍，之后不再自动弹
