@@ -80,13 +80,19 @@
   }
   @keyframes drift { to { transform: translate3d(3%, -3%, 0) scale(1.08); } }
 
-  /* 两个人都在的时候，整个背景里缓缓往上冒的小爱心 */
+  /* 整个背景里缓缓往上冒的小爱心。一个人的时候只有你的粉色，
+     TA 也在就一半粉一半蓝；中间爆开同频的那一下，全部跟着变金色 */
   .motes { position: absolute; inset: 0; z-index: 0; overflow: hidden; pointer-events: none; }
   .mote {
     position: absolute; bottom: -8%;
     width: var(--size); height: var(--size);
     animation: moteRise var(--dur) linear forwards;
+    color: var(--mine);
   }
+  .mote.yours { color: var(--yours); }
+  .mote path { fill: currentColor; transition: fill 260ms ease; }
+  /* 金色只挂在 stage 上，同频那 2 秒一过，颜色自己就回来了 */
+  #stage.synced .mote { color: var(--gold); }
   .mote i {                                   /* 外层管上升，内层管左右摇，互不打架 */
     display: block; width: 100%; height: 100%;
     animation: moteSway var(--sway) ease-in-out infinite alternate;
@@ -177,7 +183,7 @@
     font-family: var(--mono); font-size: 13px; letter-spacing: .5em;
     color: var(--gold); text-indent: .5em; white-space: nowrap;
     text-shadow: 0 0 20px rgba(255,215,110,.8);
-    animation: syncLabel 1.9s ease-out forwards;
+    animation: syncLabel 2s ease-out forwards;
   }
   @keyframes syncLabel {
     0%   { opacity: 0; transform: translate(-50%,-50%) scale(.7); }
@@ -630,7 +636,7 @@
 
   // 版本号只写在这一处，登录页和说明面板里的都从这里填。
   // 服务端那边的信息不在这个页面里，全都挪去了 /debug（只读，不进房间）
-  const VERSION = '1.2.10';
+  const VERSION = '1.3.0';
   $('gateVer').textContent = 'v' + VERSION;
   $('helpVer').textContent = 'v' + VERSION;
 
@@ -891,7 +897,7 @@
     el.addEventListener('animationend', () => el.remove());
   }
 
-  /* ---- 背景小爱心：只在两个人都在的时候冒 ---- */
+  /* ---- 背景小爱心：一直在冒，颜色跟着「TA 在不在」变 ---- */
   const MOTE_EVERY = 500;   // 平均隔多久冒一颗，毫秒
   const MOTE_RISE  = 15;     // 从底下飘到顶上要多少秒，越大越慢
   let moteTimer = null;
@@ -917,7 +923,9 @@
     svg.setAttribute('viewBox', '0 0 24 24');
     const p = d.createElementNS('http://www.w3.org/2000/svg', 'path');
     p.setAttribute('d', HEART);
-    p.setAttribute('fill', Math.random() < 0.5 ? C.mine : C.yours);   // 你俩的颜色各一半
+    // 颜色交给 CSS：默认你的粉色，TA 在就一半换成蓝色。
+    // 这样同频时一条 CSS 规则就能把在飘的全染成金色，那阵过去又自己变回来
+    if (roster.peer && Math.random() < 0.5) el.classList.add('yours');
     svg.appendChild(p);
     inner.appendChild(svg);
     el.appendChild(inner);
@@ -973,7 +981,7 @@
     stage.classList.add('synced');
     popHeart(false);
     clearTimeout(syncTimer);
-    syncTimer = setTimeout(() => stage.classList.remove('synced'), 1900);
+    syncTimer = setTimeout(() => stage.classList.remove('synced'), 2000);
 
     ring(C.gold);
     setTimeout(() => ring(C.gold), 180);
@@ -1196,8 +1204,8 @@
     if (roster.peer && !togetherFrom) togetherFrom = Date.now();
     if (!roster.peer) togetherFrom = 0;
 
-    motesOn(!!roster.peer && !offline);   // 两个人都在，背景才冒小爱心
-    bgmSync();                            // 也是两个人都在才放音乐
+    // 小爱心一直在冒，不用在这儿开关；颜色由 roster.peer 决定，下一颗自己就换了
+    bgmSync();                            // 音乐还是只有两个人都在才放
     renderStatus();
   }
 
@@ -1369,7 +1377,6 @@
       offline = true;
       dot.classList.remove('on');
       dot.classList.add('off');
-      motesOn(false);            // 自己都断了，就别再装同在
       bgmSync();
       renderStatus();
     }, 6000);
@@ -1381,7 +1388,7 @@
     offline = false;
     dot.classList.remove('off');
     dot.classList.add('on');
-    if (was) { motesOn(!!roster.peer); bgmSync(); renderStatus(); }   // 顶栏还停在「断线了，重连中」，得抹掉
+    if (was) { bgmSync(); renderStatus(); }   // 顶栏还停在「断线了，重连中」，得抹掉
   }
 
   // 关页面时打一枪，让服务器立刻知道人走了，不用等超时
@@ -1522,6 +1529,7 @@
       localStorage.setItem('heart-key', k);
     } catch (e) {}
     gate.classList.add('hide');
+    motesOn(true);
     connect();
     bgmLoad();      // 先把曲目清单拿回来，等 TA 一上线就能立刻响
 
