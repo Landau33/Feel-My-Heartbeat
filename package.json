@@ -1,6 +1,6 @@
 {
   "name": "feel-my-heartbeat",
-  "version": "1.3.1",
+  "version": "1.3.2",
   "description": "Feel My Heartbeat · Only Me and You",
   "main": "server.js",
   "scripts": {

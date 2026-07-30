@@ -459,19 +459,14 @@
     tickOnce();
   });
 
-  // 口令：优先用网址上带的（手机上直接开一个书签就行），其次用主页面存下的那个。
-  // 带过来的当场从地址栏抹掉，不留在历史记录里
-  function fromUrl() {
-    const k = new URLSearchParams(location.search).get('key') || '';
-    if (k) {
+  // 口令：每次都得手输。不认网址上带的，也不用主页面存下的那个 —— 这一页看得见
+  // 两个人的全部动静，不该因为主页面登录过就跟着开门。
+  // 老书签上可能还挂着 ?key=，进来当场从地址栏抹掉，别留在历史记录里。
+  (function scrubUrl() {
+    if (new URLSearchParams(location.search).has('key')) {
       try { history.replaceState(null, '', location.pathname); } catch (e) {}
     }
-    return k;
-  }
-
-  function saved() {
-    try { return localStorage.getItem('heart-key') || ''; } catch (e) { return ''; }
-  }
+  })();
 
   async function openView(k) {
     const r = await fetch('/check?key=' + q(k));
@@ -497,11 +492,7 @@
   });
   keyIn.addEventListener('keydown', e => { if (e.key === 'Enter') enterBtn.click(); });
 
-  (async () => {
-    const k = fromUrl() || saved();
-    if (k) { try { return await openView(k); } catch (e) {} }
-    keyIn.focus();
-  })();
+  keyIn.focus();
 })();
 </script>
 </body>
