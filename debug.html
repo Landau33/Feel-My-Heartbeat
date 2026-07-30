@@ -155,12 +155,12 @@
   </section>
 
   <section>
-    <h2>Stashed, Not Yet Delivered</h2>
+    <h2>Stashed</h2>
     <div class="box" id="stashBox"></div>
   </section>
 
   <section>
-    <h2>Note History</h2>
+    <h2>History</h2>
     <div class="box">
       <div class="picker">
         <select id="histDate"></select>
@@ -171,7 +171,7 @@
   </section>
 
   <section>
-    <h2>music Folder <b id="mN">–</b></h2>
+    <h2>Music Folder <b id="mN">–</b></h2>
     <div class="box" id="mBox"></div>
   </section>
 
@@ -199,7 +199,7 @@
 (function () {
   const $ = id => document.getElementById(id);
   const gate = $('gate'), keyIn = $('keyInput'), errEl = $('err'), enterBtn = $('enterBtn');
-  const EVERY = 2000;                 // 隔多久重读一次 /state
+  const EVERY = 5000;                 // 隔多久重读一次 /state
   const NOTE_CAP = 300;               // 一天几千条纸条全画出来页面会卡，只画最后这些
 
   let myKey = '';
@@ -271,12 +271,12 @@
   /* ---------- 各段渲染 ---------- */
   function render(d, rtt) {
     $('tVer').textContent = d.version;
-    $('tRoom').textContent = d.room === 'test' ? 'test (in memory, never saved)' : 'real (live)';
+    $('tRoom').textContent = d.room === 'test' ? 'test' : 'live';
     $('tRoom').className = d.room === 'test' ? 'ok' : '';
     $('tUp').textContent = dur(d.uptimeSec);
     $('tNow').textContent = d.nowText;
     $('tRtt').textContent = rtt + ' ms';
-    $('tState').textContent = paused ? 'Paused' : 'Re-reading every ' + (EVERY / 1000) + 's';
+    $('tState').textContent = paused ? 'Paused' : 'Update every ' + (EVERY / 1000) + 's';
     $('tState').className = paused ? 'warn' : 'dim';
 
     // 在线连接
