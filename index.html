@@ -143,15 +143,19 @@
   }
   .heart-btn .core {
     fill: var(--mine);
+    transition: fill .45s ease;
+  }
+  #stage.remote .heart-btn .core { fill: var(--yours); }
+  #stage.synced .heart-btn .core { fill: var(--gold); }
+
+  /* 发光要挂在 <svg> 这个 HTML 盒子上，不能挂在里面的 path 上：
+     SVG 的 viewport 只有 24×24 且默认裁剪，光晕超出去会被切成一个同色的正方形 */
+  .heart-btn svg {
     filter: drop-shadow(0 0 22px rgba(255,95,141,.45));
-    transition: fill .45s ease, filter .45s ease;
+    transition: filter .45s ease;
   }
-  #stage.remote .heart-btn .core {
-    fill: var(--yours); filter: drop-shadow(0 0 34px rgba(94,200,255,.6));
-  }
-  #stage.synced .heart-btn .core {
-    fill: var(--gold); filter: drop-shadow(0 0 46px rgba(255,215,110,.75));
-  }
+  #stage.remote .heart-btn svg { filter: drop-shadow(0 0 34px rgba(94,200,255,.6)); }
+  #stage.synced .heart-btn svg { filter: drop-shadow(0 0 46px rgba(255,215,110,.75)); }
 
   /* ---------- 粒子 ---------- */
   .ring {
@@ -609,8 +613,8 @@
   const C = { mine: '#ff5f8d', yours: '#5ec8ff', gold: '#ffd76e' };
   // 前三个悬浮窗里也留着；QUICK_MORE 只在大窗口出现，
   // 免得把只有 200px 宽的悬浮窗撑开
-  const QUICK = ['想你了', '在干嘛', '抱抱'];
-  const QUICK_MORE = ['早安', '晚安', '爱你', '亲亲', '吃了吗', '我到家了', '辛苦了', '睡了吗'];
+  const QUICK = ['想你', '抱抱', '亲亲', '爱你'];
+  const QUICK_MORE = ['想你', '抱抱', '早安', '在干嘛', '晚安', '爱你', '亲亲', '睡了吗'];
 
   let myName = '', myKey = '', myId = '';
 
@@ -636,7 +640,7 @@
 
   // 版本号只写在这一处，登录页和说明面板里的都从这里填。
   // 服务端那边的信息不在这个页面里，全都挪去了 /debug（只读，不进房间）
-  const VERSION = '1.3.0';
+  const VERSION = '1.3.1';
   $('gateVer').textContent = 'v' + VERSION;
   $('helpVer').textContent = 'v' + VERSION;
 

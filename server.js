@@ -13,7 +13,7 @@ const crypto = require('crypto');
 
 // 版本号以 package.json 为准，代码里不再各写一份。
 // 升版本只改 package.json（或用 npm version）
-let VERSION = '1.3.0';
+let VERSION = '1.3.1';
 try { VERSION = require('./package.json').version || VERSION; } catch (e) {}
 
 const PORT = process.env.PORT || 8787;
