@@ -13,7 +13,7 @@ const crypto = require('crypto');
 
 // 版本号以 package.json 为准，代码里不再各写一份。
 // 升版本只改 package.json（或用 npm version）
-let VERSION = '1.3.3';
+let VERSION = '1.3.4';
 try { VERSION = require('./package.json').version || VERSION; } catch (e) {}
 
 const PORT = process.env.PORT || 8787;
@@ -59,6 +59,14 @@ function makeRoom(name, persist) {
     store: emptyStore(),
     clients: new Set(),      // 这个房间里的连接
     lastTap: null,           // 上一下心跳，判同频用
+    // 正在放的那首歌。谁放、从什么时候开始放，由服务端说了算，两边照着它对时间。
+    // 只在内存里，重启就重来 —— 音乐不值得落盘
+    music: null,             // { name, startedAt, seq, by, dur }
+    musicSeq: 0,
+    musicBag: [],            // 洗牌抓阄的袋子
+    musicTimer: null,
+    musicFails: 0,
+    musicDead: false,
     // 被顶掉的连接 id 记一小会儿。它要是没收到 evicted（页面正好冻着，手里没挂请求），
     // 醒来一 poll 只拿到 410，就会重新 join —— 同一台设备开两个页面时，
     // 两边会没完没了地互相顶。记下来，下次 poll 直接告诉它「你被顶掉了」。
@@ -198,6 +206,92 @@ function sendMusic(req, res, file) {
   });
 }
 
+// ---------- 同一首歌，同一处 ----------
+// 以前是两边各自抓阄，各放各的：同一个房间里放着两首不相干的歌。
+// 现在「放哪首、什么时候开始放的」只有服务端这一份，页面照着它对时间 ——
+// 一个人换歌，另一个人那边跟着换；中途进来的，直接从当前这一处接上。
+//
+// 时间不用两边对表：服务端给的是「已经放了多少毫秒」，页面收到就以自己的钟为准往下走。
+// 差的只是一趟网络的工夫，背景音乐听不出来。
+const MUSIC_FALLBACK_MS = 10 * 60 * 1000;   // 没有一台报得出时长时，一首最多占这么久
+
+// 两个不同名字的人都在，才有音乐这回事（假 TA 也算，test 房间里就靠它）
+function musicPeers(room) {
+  return new Set([...room.clients].map(c => c.name)).size >= 2;
+}
+
+function musicState(room) {
+  const m = room.music;
+  if (!m) return { name: '', seq: room.musicSeq, dead: room.musicDead };
+  return { name: m.name, seq: m.seq, pos: Date.now() - m.startedAt, by: m.by, dead: false };
+}
+
+function musicClear(room) {
+  clearTimeout(room.musicTimer);
+  room.musicTimer = null;
+  room.music = null;
+}
+
+function musicOff(room) {
+  if (!room.music) return;
+  musicClear(room);
+  broadcast(room, 'music', musicState(room));
+}
+
+function musicPlay(room, name, by) {
+  musicClear(room);
+  room.music = { name, startedAt: Date.now(), seq: ++room.musicSeq, by: by || '', dur: 0 };
+  // 兜底：谁都没报时长（两边都静音了、或者都没放出来）的话，别在这一首上卡到天荒地老
+  room.musicTimer = setTimeout(() => musicNext(room), MUSIC_FALLBACK_MS);
+  broadcast(room, 'music', musicState(room));
+}
+
+// 洗牌抓阄：一轮里每首都放过一次才重新洗，比每次纯随机少些「刚放完又来」
+function musicPick(room) {
+  const tracks = musicList();
+  if (!tracks.length) return '';
+  const now = room.music ? room.music.name : '';
+  room.musicBag = room.musicBag.filter(x => tracks.includes(x));   // 文件夹里删掉的，袋子里也去掉
+  if (!room.musicBag.length) {
+    room.musicBag = tracks.slice();
+    for (let i = room.musicBag.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      const t = room.musicBag[i]; room.musicBag[i] = room.musicBag[j]; room.musicBag[j] = t;
+    }
+    if (room.musicBag.length > 1 && room.musicBag[0] === now) room.musicBag.push(room.musicBag.shift());
+  }
+  // 手挑的那首不经过袋子，所以袋子里可能还留着它 —— 别接着又放一遍
+  let name = room.musicBag.shift();
+  if (name === now && room.musicBag.length) {
+    room.musicBag.push(name);
+    name = room.musicBag.shift();
+  }
+  return name;
+}
+
+function musicNext(room, by) {
+  if (!musicPeers(room)) return musicOff(room);
+  const name = musicPick(room);
+  if (!name) return musicOff(room);            // 文件夹空了
+  musicPlay(room, name, by);
+}
+
+// 名单一变就问一句：现在该不该有音乐
+function musicSync(room) {
+  if (!musicPeers(room)) {
+    room.musicFails = 0;
+    room.musicDead = false;                    // 下次两个人再凑齐，坏文件重新给一轮机会
+    return musicOff(room);
+  }
+  if (!room.music && !room.musicDead) musicNext(room);
+}
+
+// 名单变了：音乐跟着调整，然后把新名单发出去
+function announce(room) {
+  musicSync(room);
+  broadcast(room, 'presence', presence(room));
+}
+
 // ---------- 在线连接 ----------
 // 每个客户端有一个消息队列。它的 /poll 请求要么立刻取走队列里的消息，
 // 要么被挂住，等到有新消息时再唤醒。
@@ -294,7 +388,7 @@ setInterval(() => {
       if (now - c.seen > CLIENT_TIMEOUT) { drop(c); changed = true; }
     }
     for (const [id, e] of room.evicted) if (now - e.t > EVICTED_TTL) room.evicted.delete(id);
-    if (changed) broadcast(room, 'presence', presence(room));
+    if (changed) announce(room);
   }
 }, 10000);
 
@@ -368,9 +462,12 @@ function admit(name, dev, req, ver, room) {
   // 就一直挂在在线名单里冒充一台设备。当场请出去，那边会提示刷新。
   if (client.ver !== VERSION) {
     evict(client, 'stale');
-    broadcast(room, 'presence', presence(room));
+    announce(room);
     return client;
   }
+
+  // 正在放什么、放到哪儿了。中途进来的照着这一份接上，不用等下一首
+  send(client, 'music', musicState(room));
 
   // 把别人趁你不在时攒下的心跳和纸条交给你
   const stash = room.store.stash;
@@ -385,7 +482,7 @@ function admit(name, dev, req, ver, room) {
     save(room);
   }
 
-  broadcast(room, 'presence', presence(room));
+  announce(room);
   return client;
 }
 
@@ -410,7 +507,7 @@ function botOn(room) {
   };
   room.bot = bot;
   room.clients.add(bot);
-  broadcast(room, 'presence', presence(room));
+  announce(room);
   return bot;
 }
 
@@ -419,7 +516,7 @@ function botOff(room) {
   const bot = room.bot;
   room.bot = null;
   room.clients.delete(bot);
-  broadcast(room, 'presence', presence(room));
+  announce(room);
 }
 
 // 有人点了心跳，假 TA 隔一会儿跟着点一下，好撞出同频
@@ -483,6 +580,57 @@ function onMessage(client, m) {
       save(room);
     }
     broadcast(room, 'note', { from: client.id, name: client.name, text });
+    return;
+  }
+
+  // 音乐。页面只提要求，放什么、放到哪儿始终以服务端这一份为准
+  if (m.t === 'music') {
+    const act = String(m.act || '');
+    const seq = Number(m.seq) || 0;
+
+    // 「现在放的是什么？」重连、从后台切回来、刚把音乐打开的时候问一句
+    if (act === 'sync') { send(client, 'music', musicState(room)); return; }
+
+    // 一个人的时候本来就没有音乐，点什么都不作数
+    if (!musicPeers(room)) return;
+
+    if (act === 'pick') {                       // 挑了一首，两边一起从头听
+      const name = String(m.name || '');
+      if (!musicList().includes(name)) return;
+      room.musicFails = 0; room.musicDead = false;
+      return musicPlay(room, name, client.name);
+    }
+    if (act === 'skip') {                       // 换一首
+      room.musicFails = 0; room.musicDead = false;
+      return musicNext(room, client.name);
+    }
+
+    // 剩下几种说的都是「那一首」，对不上号就是已经翻篇了
+    if (!room.music || seq !== room.music.seq) return;
+
+    if (act === 'ended') {                      // 放完了。两边都会报，认先到的那条
+      room.musicFails = 0;
+      return musicNext(room);
+    }
+    if (act === 'dur') {                        // 报时长，好知道什么时候该换下一首
+      room.musicFails = 0;                      // 有人放得出来，这一轮的失败重新数
+      const dur = Number(m.dur) || 0;
+      if (dur <= 0 || dur > 3600) return;
+      room.music.dur = dur;
+      clearTimeout(room.musicTimer);
+      const left = room.music.startedAt + dur * 1000 + 1500 - Date.now();
+      room.musicTimer = setTimeout(() => musicNext(room), Math.max(1000, left));
+      return;
+    }
+    if (act === 'fail') {                       // 这首放不出来（文件坏了、这个浏览器不认这个格式）
+      // 一台放不出来就整个房间跳过：真坏的文件两边都一样坏，
+      // 只是格式挑浏览器的话，让两个人听同一首比迁就一边更要紧
+      if (++room.musicFails > musicList().length) {
+        room.musicDead = true;                  // 整轮都不行，安静下来
+        return musicOff(room);
+      }
+      return musicNext(room);
+    }
     return;
   }
 
@@ -565,6 +713,7 @@ const server = http.createServer(async (req, res) => {
       攒着的纸条: room.store.stash.notes.length,
       聊天记录天数: historyDates().length,
       曲目数: musicList().length,
+      正在放: room.music ? room.music.name + '（' + Math.round((Date.now() - room.music.startedAt) / 1000) + ' 秒）' : '（没放）',
     }, null, 2));
   }
 
@@ -613,6 +762,7 @@ const server = http.createServer(async (req, res) => {
       },
       historyDates: room.persist ? historyDates() : [],
       tracks: musicList(),
+      music: musicState(room),
       data,
     }));
   }
@@ -744,7 +894,7 @@ const server = http.createServer(async (req, res) => {
     if (keyOk(data.key)) {
       const room = roomOf(data.room);
       const c = [...room.clients].find(x => x.id === String(data.id || ''));
-      if (c) { drop(c); broadcast(room, 'presence', presence(room)); }
+      if (c) { drop(c); announce(room); }
     }
     res.writeHead(204);
     return res.end();
