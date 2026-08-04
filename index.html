@@ -76,6 +76,8 @@
       radial-gradient(38% 30% at 30% 22%, rgba(255,95,141,.17), transparent 70%),
       radial-gradient(34% 28% at 72% 76%, rgba(94,200,255,.14), transparent 70%);
     filter: blur(20px);
+    /* 这层又大又糊，先说一声只动 transform，让它自己占一层，别每帧连着模糊重画 */
+    will-change: transform;
     animation: drift 26s ease-in-out infinite alternate;
   }
   @keyframes drift { to { transform: translate3d(3%, -3%, 0) scale(1.08); } }
@@ -171,29 +173,15 @@
     position: absolute; left: 50%; top: 50%; z-index: 3;
     width: 22px; height: 22px; margin: -11px 0 0 -11px;
     pointer-events: none;
-    animation: fly var(--dur) cubic-bezier(.18,.7,.32,1) forwards;
+    /* 一整批一次性插进来，先后错开靠 delay，不再一颗一个 setTimeout。
+       both 是必须的：等 delay 的那段时间要按 0% 那帧藏着，否则会先杵在中间露一下 */
+    animation: fly var(--dur) cubic-bezier(.18,.7,.32,1) var(--delay, 0ms) both;
   }
   .spark svg { width: 100%; height: 100%; display: block; }
   @keyframes fly {
     0%   { transform: translate(0,0) scale(.2) rotate(0deg); opacity: 0; }
     12%  { opacity: 1; }
     100% { transform: translate(var(--tx), var(--ty)) scale(var(--sc)) rotate(var(--rot)); opacity: 0; }
-  }
-
-  /* 同频 */
-  .sync-label {
-    position: absolute; left: 50%; top: 50%; z-index: 6;
-    transform: translate(-50%,-50%); pointer-events: none;
-    font-family: var(--mono); font-size: 13px; letter-spacing: .5em;
-    color: var(--gold); text-indent: .5em; white-space: nowrap;
-    text-shadow: 0 0 20px rgba(255,215,110,.8);
-    animation: syncLabel 2s ease-out forwards;
-  }
-  @keyframes syncLabel {
-    0%   { opacity: 0; transform: translate(-50%,-50%) scale(.7); }
-    20%  { opacity: 1; transform: translate(-50%,-50%) scale(1); }
-    75%  { opacity: 1; }
-    100% { opacity: 0; transform: translate(-50%,-115%) scale(1); }
   }
 
   /* 纸条：像弹幕一样从右往左飘过屏幕上中部 */
@@ -473,7 +461,6 @@
   .compact .chip { padding: 4px 9px; font-size: 10.5px; }
   .compact .icon { padding: 3px 7px; font-size: 9.5px; }
   .compact .note { font-size: 11.5px; padding: 4px 10px; }
-  .compact .sync-label { font-size: 11px; }
   .compact .stash { padding: 16px; gap: 10px; }
   .compact .stash .big { font-size: 26px; }
   .compact .stash p { font-size: 11px; }
@@ -481,7 +468,8 @@
   @media (prefers-reduced-motion: reduce) {
     .heart-btn, .aura { animation: none; }
     .heart-btn.pop svg, .heart-btn.pop.soft svg { animation: none; }
-    .spark, .ring { animation-duration: 1ms; }
+    /* delay 也要一起清掉，否则时长压到 1ms 了还得挨个等着排队出场 */
+    .spark, .ring { animation-duration: 1ms; animation-delay: 0ms; }
   }
 </style>
 </head>
@@ -1021,27 +1009,68 @@
   }
 
   /* ================= 粒子 ================= */
-  function spark(color, spread) {
-    const d = doc();
-    const el = d.createElement('span');
-    el.className = 'spark';
-    const a = Math.random() * Math.PI * 2;
-    const dist = (spread || 1) * (85 + Math.random() * 130);
-    el.style.setProperty('--tx', (Math.cos(a) * dist).toFixed(1) + 'px');
-    el.style.setProperty('--ty', (Math.sin(a) * dist - 40).toFixed(1) + 'px');
-    el.style.setProperty('--sc', (0.5 + Math.random() * 0.9).toFixed(2));
-    el.style.setProperty('--rot', (Math.random() * 200 - 100).toFixed(0) + 'deg');
-    el.style.setProperty('--dur', (1000 + Math.random() * 700).toFixed(0) + 'ms');
-
-    const svg = d.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  /* 一颗心的 svg 每次都现搭太亏，照着模子印。舞台会被搬进悬浮窗，
+     换了 document 模子也得跟着换，所以记一下是哪个 document 的 */
+  const SVGNS = 'http://www.w3.org/2000/svg';
+  let tplDoc = null, sparkTpl = null, moteTpl = null;
+  function heartSvg(d) {
+    const svg = d.createElementNS(SVGNS, 'svg');
     svg.setAttribute('viewBox', '0 0 24 24');
-    const p = d.createElementNS('http://www.w3.org/2000/svg', 'path');
+    const p = d.createElementNS(SVGNS, 'path');
     p.setAttribute('d', HEART);
-    p.setAttribute('fill', color);
     svg.appendChild(p);
-    el.appendChild(svg);
-    stage.appendChild(el);
-    el.addEventListener('animationend', () => el.remove());
+    return svg;
+  }
+  function tpls() {
+    const d = doc();
+    if (tplDoc === d) return;
+    tplDoc = d;
+
+    sparkTpl = d.createElement('span');
+    sparkTpl.className = 'spark';
+    sparkTpl.appendChild(heartSvg(d));
+
+    // 小爱心多一层 <i>：外层管上升，内层管左右摇，互不打架
+    moteTpl = d.createElement('span');
+    moteTpl.className = 'mote';
+    const inner = d.createElement('i');
+    inner.appendChild(heartSvg(d));
+    moteTpl.appendChild(inner);
+  }
+
+  /* 一批一次性插进舞台：先后错开交给 CSS 的 animation-delay。
+     以前是一颗一个 setTimeout —— 同频那下自己那拨和金色那拨叠在一起，
+     就是几十个定时器各自往 DOM 里插一次，每插一次样式重算一遍，卡就卡在这儿。
+     现在一批只碰一次 DOM、一个定时器收尾，飞的样子和数量都没变 */
+  function sparks(color, n, spread, step) {
+    if (n <= 0) return;
+    tpls();
+    const frag = doc().createDocumentFragment();
+    const batch = [];
+    let last = 0;
+    for (let i = 0; i < n; i++) {
+      const el = sparkTpl.cloneNode(true);
+      const a = Math.random() * Math.PI * 2;
+      const dist = (spread || 1) * (85 + Math.random() * 130);
+      const dur = 1000 + Math.random() * 700;
+      const delay = i * step;
+      el.style.setProperty('--tx', (Math.cos(a) * dist).toFixed(1) + 'px');
+      el.style.setProperty('--ty', (Math.sin(a) * dist - 40).toFixed(1) + 'px');
+      el.style.setProperty('--sc', (0.5 + Math.random() * 0.9).toFixed(2));
+      el.style.setProperty('--rot', (Math.random() * 200 - 100).toFixed(0) + 'deg');
+      el.style.setProperty('--dur', dur.toFixed(0) + 'ms');
+      el.style.setProperty('--delay', delay + 'ms');
+      el.firstChild.firstChild.setAttribute('fill', color);
+      frag.appendChild(el);
+      batch.push(el);
+      last = Math.max(last, delay + dur);
+    }
+    stage.appendChild(frag);
+
+    // 一批一个定时器收尾，比每颗挂一个 animationend 监听便宜。
+    // 飞完的那几颗会多留一会儿，但那会儿已经是 opacity 0，也没有动画在跑了
+    setTimeout(() => { for (let i = 0; i < batch.length; i++) batch[i].remove(); },
+               last + 80);
   }
 
   function ring(color) {
@@ -1058,12 +1087,11 @@
   let moteTimer = null;
 
   function mote() {
-    const d = doc();
+    tpls();
     const h = stage.clientHeight || 480;
     const size = 9 + Math.random() * 13;
 
-    const el = d.createElement('span');
-    el.className = 'mote';
+    const el = moteTpl.cloneNode(true);
     el.style.left = (3 + Math.random() * 94) + '%';
     el.style.setProperty('--size', size.toFixed(1) + 'px');
     el.style.setProperty('--ty', '-' + (h + size * 2 + 40).toFixed(0) + 'px');
@@ -1073,17 +1101,9 @@
     el.style.setProperty('--rot', (5 + Math.random() * 12).toFixed(0) + 'deg');
     el.style.setProperty('--peak', (0.16 + Math.random() * 0.16).toFixed(2));
 
-    const inner = d.createElement('i');
-    const svg = d.createElementNS('http://www.w3.org/2000/svg', 'svg');
-    svg.setAttribute('viewBox', '0 0 24 24');
-    const p = d.createElementNS('http://www.w3.org/2000/svg', 'path');
-    p.setAttribute('d', HEART);
     // 颜色交给 CSS：默认你的粉色，TA 在就一半换成蓝色。
     // 这样同频时一条 CSS 规则就能把在飘的全染成金色，那阵过去又自己变回来
     if (roster.peer && Math.random() < 0.5) el.classList.add('yours');
-    svg.appendChild(p);
-    inner.appendChild(svg);
-    el.appendChild(inner);
 
     el.addEventListener('animationend', e => {
       if (e.animationName === 'moteRise') el.remove();
@@ -1120,8 +1140,7 @@
     const color = C[who] || C.mine;
     popHeart(holding);
     ring(color);
-    const cap = Math.min(n, 26);
-    for (let i = 0; i < cap; i++) setTimeout(() => spark(color), i * 42);
+    sparks(color, Math.min(n, 26), 1, 42);
 
     if (who === 'yours') {
       stage.classList.add('remote');
@@ -1140,13 +1159,7 @@
 
     ring(C.gold);
     setTimeout(() => ring(C.gold), 180);
-    for (let i = 0; i < 30; i++) setTimeout(() => spark(C.gold, 1.5), i * 34);
-
-    const label = doc().createElement('div');
-    label.className = 'sync-label';
-    label.textContent = '同频';
-    stage.appendChild(label);
-    label.addEventListener('animationend', () => label.remove());
+    sparks(C.gold, 30, 1.5, 34);
 
     if (navigator.vibrate) navigator.vibrate([16, 50, 16, 50, 40]);
     tone([523, 659, 784, 1047], 0.9, 0.05);
