@@ -489,7 +489,7 @@
   <div class="aura"></div>
   <div class="motes" id="motes"></div>
 
-  <button class="heart-btn" id="heart" aria-label="发送心跳，按住可以连发">
+  <button class="heart-btn" id="heart" aria-label="发送心跳，长按可连续发送">
     <svg viewBox="0 0 24 24" aria-hidden="true">
       <path class="core" d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/>
     </svg>
@@ -498,19 +498,19 @@
   <div class="top">
     <span class="who">
       <span class="dot" id="dot"></span>
-      <span id="rosterFull">1 人在线 · 你</span><span id="rosterMini">等 TA 上线</span>
+      <span id="rosterFull">1 人在线 · 你</span><span id="rosterMini">等待对方上线</span>
     </span>
     <span class="spacer"></span>
     <span class="test-tag testonly">测试房间</span>
-    <button class="icon testonly" id="botBtn" title="一键叫来一个假的 TA，好试同频">同频模式</button>
-    <button class="nowplay hide" id="nowPlay" title="点一下换歌">
+    <button class="icon testonly" id="botBtn" title="加入一个模拟客户端，用于测试同频">同频模式</button>
+    <button class="nowplay hide" id="nowPlay" title="点击切换曲目">
       <span class="np-name" id="npName"></span>
       <span class="np-time"><span id="npCur">0:00</span><span class="np-dur" id="npDur"></span></span>
     </button>
-    <button class="icon" id="soundBtn" title="声音">♪</button>
-    <button class="icon" id="bgmBtn" title="两个人都在的时候放音乐">♫</button>
-    <button class="icon pop" id="pickBtn" title="选一首，两个人一起听">选歌</button>
-    <button class="icon pop" id="helpBtn" title="怎么玩">?</button>
+    <button class="icon" id="soundBtn" title="音效">♪</button>
+    <button class="icon" id="bgmBtn" title="双方同时在线时播放音乐">♫</button>
+    <button class="icon pop" id="pickBtn" title="选择曲目，双方同步播放">选歌</button>
+    <button class="icon pop" id="helpBtn" title="使用说明">?</button>
     <button class="icon pop" id="popBtn">悬浮窗</button>
   </div>
 
@@ -518,18 +518,18 @@
     <div class="chips" id="chips"></div>
     <div class="compose">
       <input id="noteInput" maxlength="60" placeholder="Say something..." autocomplete="off">
-      <button id="sendNote">送出</button>
+      <button id="sendNote">发送</button>
     </div>
     <div class="tally">
-      <span>今天 <b id="todayN">0</b>　你 <b id="mineN">0</b>　TA <b id="yoursN">0</b></span>
-      <span>同频 <b class="g" id="syncN">0</b>　共 <b id="totalN">0</b></span>
+      <span>今天 <b id="todayN">0</b>　你 <b id="mineN">0</b>　对方 <b id="yoursN">0</b></span>
+      <span>同频 <b class="g" id="syncN">0</b>　累计 <b id="totalN">0</b></span>
     </div>
   </div>
 
   <div class="help hide" id="help">
     <div class="sheet">
       <div class="sheet-top">
-        <span class="eyebrow">怎么玩</span>
+        <span class="eyebrow">使用说明</span>
         <button class="icon" id="helpClose">关闭</button>
       </div>
 
@@ -537,16 +537,16 @@
         <div class="row">
           <i class="sw mine"></i>
           <div>
-            <b>点一下</b>
-            <span>两边同时冒出小爱心。你发的是粉色，TA 发的是青色，颜色不用记，看一眼就知道是谁。</span>
+            <b>点击</b>
+            <span>两端同时显示爱心。你发出的为粉色，对方发出的为青色，无需记忆，一眼即可分辨。</span>
           </div>
         </div>
 
         <div class="row">
           <i class="sw mine"></i>
           <div>
-            <b>按住不放</b>
-            <span>连发。大爱心会跟着急促跳动，松手才停。空格键同理，按住也连发。</span>
+            <b>长按</b>
+            <span>连续发送。大爱心会随之快速跳动，松开后停止。空格键行为相同，按住同样连续发送。</span>
           </div>
         </div>
 
@@ -554,39 +554,39 @@
           <i class="sw gold"></i>
           <div>
             <b>同频</b>
-            <span>两个人在三秒内先后点了，两边一起爆开金色。这个刷不出来，只有你俩真的同时在看屏幕时才会撞上。</span>
+            <span>双方在三秒内先后点击时，两端同时触发金色特效。该效果无法单方触发，只有双方确实同时在看屏幕时才会出现。</span>
           </div>
         </div>
 
         <div class="row">
           <i class="sw yours"></i>
           <div>
-            <b>TA 不在的时候</b>
-            <span>你点的每一下都替你存着。等 TA 打开网页，会先看到一共攒了多少，按一下全部放出来。</span>
+            <b>对方离线时</b>
+            <span>你的每一次点击都会被保留。对方打开网页后会先看到累计的数量，点击一次即可全部展开。</span>
           </div>
         </div>
 
         <div class="row">
           <i class="sw yours"></i>
           <div>
-            <b>说句话</b>
-            <span>下面三个快捷词，或者自己打字，六十个字以内。会飘过两边的屏幕，看完就没了，不留记录。</span>
+            <b>发送消息</b>
+            <span>使用下方的快捷词，或者自行输入，限六十字以内。</span>
           </div>
         </div>
 
         <div class="row">
           <i class="sw gold"></i>
           <div>
-            <b>同在时的音乐</b>
-            <span>两个人都在的时候，服务器 music 文件夹里的歌会随机放起来，一首接一首，人走了就慢慢淡掉。两边听到的是同一首、同一处 —— 中途进来的也会接到那一处。</span>
+            <b>同时在线时的音乐</b>
+            <span>双方同时在线时，服务器 music 文件夹中的曲目会随机播放，一首接一首，一方离线后逐渐淡出。两端播放的是同一首、同一进度 —— 中途加入的一端也会接入当前进度。</span>
           </div>
         </div>
 
         <div class="row">
           <i class="sw gold"></i>
           <div>
-            <b>换一首</b>
-            <span>顶栏的「选歌」，或者点正在放的那一首，会列出全部曲目。挑一首，TA 那边跟着换，两个人从头一起听。「换一首」是随机再抓一首。</span>
+            <b>切换曲目</b>
+            <span>点击顶栏的「选歌」，或点击当前播放的曲目，会列出全部曲目。选定一首后，对方一同切换，双方从头开始播放。「换一首」为随机重新选择。</span>
           </div>
         </div>
 
@@ -594,27 +594,27 @@
           <i class="sw mine"></i>
           <div>
             <b>悬浮窗</b>
-            <span>开一个始终置顶的小窗，浮在所有软件之上，切窗口也不会被盖住。平时只有一颗心，鼠标移上去才浮出快捷词。要 Chrome 或 Edge。</span>
+            <span>打开一个始终置顶的小窗口，浮于所有软件之上，切换窗口时不会被遮挡。默认仅显示一颗爱心，鼠标移入后才显示快捷词。需要 Chrome 或 Edge。</span>
           </div>
         </div>
 
         <div class="row">
           <i class="sw dim"></i>
           <div>
-            <b>底下那行数字</b>
-            <span>今天一共多少下、你和 TA 各自多少下、撞上过几次同频、从第一天到现在的总数。</span>
+            <b>底部的计数</b>
+            <span>今天的总次数、你与对方各自的次数、触发同频的次数，以及从第一天至今的累计总数。</span>
           </div>
         </div>
       </div>
 
-      <div class="sheet-foot">右上角 ♪ 关声音　·　♫ 只关自己这边的音乐　·　随时点 ? 再看一遍　·　<span id="helpVer"></span></div>
+      <div class="sheet-foot">右上角 ♪ 关闭音效　·　♫ 仅关闭本端的音乐　·　随时点击 ? 可再次查看　·　<span id="helpVer"></span></div>
     </div>
   </div>
 
   <div class="help hide" id="picker">
     <div class="sheet">
       <div class="sheet-top">
-        <span class="eyebrow">选一首</span>
+        <span class="eyebrow">选择曲目</span>
         <button class="icon" id="pickClose">关闭</button>
       </div>
       <div class="tracks" id="tracks"></div>
@@ -628,7 +628,7 @@
   <div class="stash hide" id="stash">
     <div class="big" id="stashBig">0</div>
     <p id="stashText"></p>
-    <button id="stashBtn">放出来</button>
+    <button id="stashBtn">全部展开</button>
   </div>
 </div>
 
@@ -681,7 +681,7 @@
 
   // 版本号只写在这一处，登录页和说明面板里的都从这里填。
   // 服务端那边的信息不在这个页面里，全都挪去了 /debug（只读，不进房间）
-  const VERSION = '1.3.4';
+  const VERSION = '1.3.5';
   $('gateVer').textContent = 'v' + VERSION;
   $('helpVer').textContent = 'v' + VERSION;
 
@@ -784,7 +784,7 @@
     nowPlay.classList.toggle('hide', !on);
     if (!on) return;
     npName.textContent = bgmNow.replace(/\.[^.]+$/, '');   // 扩展名不用给人看
-    nowPlay.title = bgmNow + (bgmBy ? ' · ' + bgmBy + ' 选的' : '') + '　点一下换歌';
+    nowPlay.title = bgmNow + (bgmBy ? ' · 由 ' + bgmBy + ' 选定' : '') + '　点击切换曲目';
     npCur.textContent = mmssOf(a.currentTime);
     npDur.textContent = a.duration ? ' / ' + mmssOf(a.duration) : '';
     nowPlay.style.setProperty('--p', (a.duration ? (a.currentTime / a.duration) * 100 : 0).toFixed(1) + '%');
@@ -938,12 +938,12 @@
   function bgmLabel() {
     bgmBtn.textContent = bgmPref ? '♫' : '♫̸';
     bgmBtn.style.color = !bgmPref ? 'var(--dim)' : (bgmNow ? 'var(--mine)' : 'var(--text)');
-    bgmBtn.title = !bgmPref ? '这边的音乐关着 —— TA 那边照放'
-      : bgmBlocked ? '点一下心跳，音乐就接上'
-      : bgmNow ? '正在放：' + bgmNow + (bgmBy ? ' · ' + bgmBy + ' 选的' : '')
-      : bgmDead ? 'music 里的文件这个浏览器一个都放不出来'
-      : !bgmTracks.length ? '服务器的 music 文件夹里还没有歌'
-      : '两个人都在的时候放音乐';
+    bgmBtn.title = !bgmPref ? '本端的音乐已关闭 —— 对方仍在播放'
+      : bgmBlocked ? '点击心跳即可恢复播放'
+      : bgmNow ? '正在播放：' + bgmNow + (bgmBy ? ' · 由 ' + bgmBy + ' 选定' : '')
+      : bgmDead ? 'music 中的文件当前浏览器均无法播放'
+      : !bgmTracks.length ? '服务器的 music 文件夹中暂无曲目'
+      : '双方同时在线时播放音乐';
     nowRender();
   }
 
@@ -976,7 +976,7 @@
     if (!bgmTracks.length) {
       const p = d.createElement('p');
       p.className = 'track-empty';
-      p.textContent = '服务器的 music 文件夹里还没有歌。往里面丢几个音频文件就有了，不用重启。';
+      p.textContent = '服务器的 music 文件夹中暂无曲目。放入音频文件即可，无需重启服务。';
       tracksBox.appendChild(p);
     }
 
@@ -989,16 +989,16 @@
       t.textContent = name.replace(/\.[^.]+$/, '');
       const tag = d.createElement('span');
       tag.className = 't-tag';
-      tag.textContent = name === bgmNow ? (bgmBy ? bgmBy + ' 选的' : '正在放') : '';
+      tag.textContent = name === bgmNow ? (bgmBy ? '由 ' + bgmBy + ' 选定' : '正在播放') : '';
       b.appendChild(t); b.appendChild(tag);
       b.addEventListener('click', () => pickTrack(name));
       tracksBox.appendChild(b);
     });
 
     pickSkip.disabled = !usable || !bgmTracks.length;
-    pickHint.textContent = !usable ? '等 TA 上线，音乐才会响'
-      : !bgmPref ? '你这边的音乐是关着的，右上角 ♫ 打开'
-      : '点一首，TA 那边跟着换 —— 你们听到的是同一处';
+    pickHint.textContent = !usable ? '对方上线后音乐才会播放'
+      : !bgmPref ? '本端的音乐已关闭，可通过右上角 ♫ 开启'
+      : '选定一首后对方一同切换 —— 双方播放的是同一进度';
   }
 
   function pickTrack(name) {
@@ -1387,18 +1387,18 @@
       return;
     }
     if (kicked) {
-      rosterFull.textContent = '这个连接被顶掉了，刷新页面重来';
+      rosterFull.textContent = '该连接已被顶替，请刷新页面重新连接';
       rosterMini.textContent = '已断开';
       return;
     }
     if (offline) {
-      rosterFull.textContent = '断线了，重连中';
+      rosterFull.textContent = '连接已断开，正在重连';
       rosterMini.textContent = '重连中';
       return;
     }
     const t = togetherFrom ? ' · 同在 ' + mmss() : '';
     rosterFull.textContent = roster.people + ' 人在线 · ' + roster.list + t;
-    rosterMini.textContent = roster.peer ? roster.peer + ' ' + mmss() : '等 TA 上线';
+    rosterMini.textContent = roster.peer ? roster.peer + ' ' + mmss() : '等待对方上线';
   }
 
   function tick() { if (togetherFrom) renderStatus(); }
@@ -1411,11 +1411,11 @@
     const total = Object.values(hearts).reduce((a, b) => a + b, 0);
     if (!total && !notes.length) return;
 
-    const who = Object.keys(hearts)[0] || (notes[0] && notes[0].name) || 'TA';
+    const who = Object.keys(hearts)[0] || (notes[0] && notes[0].name) || '对方';
     stashBig.textContent = total || notes.length;
     stashText.textContent = total
-      ? '你不在的时候，' + who + ' 点了这么多下。'
-      : who + ' 留了 ' + notes.length + ' 张纸条。';
+      ? '你离线期间，' + who + ' 发送了这么多次心跳。'
+      : who + ' 留下了 ' + notes.length + ' 条消息。';
     stashBox.classList.remove('hide');
 
     stashBtn.onclick = () => {
@@ -1595,7 +1595,7 @@
 
   async function openFloat() {
     if (!('documentPictureInPicture' in window)) {
-      alert('这个浏览器不支持置顶悬浮窗。\n用 Chrome 或 Edge（116 以上）打开就可以了。\n另外网址必须是 https 或 localhost。');
+      alert('当前浏览器不支持置顶悬浮窗。\n请使用 Chrome 或 Edge（116 及以上版本）打开。\n此外，地址必须为 https 或 localhost。');
       return;
     }
     if (pipWin) { pipWin.focus(); return; }
@@ -1652,10 +1652,10 @@
     }
     botBtn.disabled = false;
     botBtn.classList.toggle('on', botWant);
-    botBtn.textContent = botWant ? '同频模式 开' : '同频模式';
+    botBtn.textContent = botWant ? '同频模式 已开启' : '同频模式';
     botBtn.title = botWant
-      ? '假的 TA 在房间里，点一下心跳它会跟着点 —— 再按一下送走它'
-      : '一键叫来一个假的 TA，好试同频';
+      ? '模拟客户端已在房间中，点击心跳后它会跟随点击 —— 再次点击可将其移除'
+      : '加入一个模拟客户端，用于测试同频';
   }
   botBtn.addEventListener('click', () => setBot(!botWant));
 
@@ -1690,13 +1690,13 @@
 
     errEl.classList.remove('show');
     enterBtn.disabled = true;
-    enterBtn.textContent = '核对中';
+    enterBtn.textContent = '校验中';
 
     let res;
     try { res = await fetch('/check?key=' + encodeURIComponent(k)); }
-    catch (e) { return fail('连不上服务器'); }
-    if (res.status === 401) return fail('口令不对');
-    if (!res.ok) return fail('服务器出错了 ' + res.status);
+    catch (e) { return fail('无法连接到服务器'); }
+    if (res.status === 401) return fail('口令错误');
+    if (!res.ok) return fail('服务器返回错误 ' + res.status);
 
     try {
       const info = await res.json();
